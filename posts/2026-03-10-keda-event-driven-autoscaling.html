@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="KEDA brings event-driven autoscaling to Kubernetes — scale on queue depth, Azure Service Bus messages, or any custom metric. Here's how it works and when to use it." />
+  <title>KEDA: Event-Driven Autoscaling That Actually Makes Sense · Feynman</title>
+  <link rel="stylesheet" href="../style.css" />
+  <script src="../theme.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="nav-inner">
+      <a href="../index.html" class="nav-brand">
+        feynman
+        <div class="nav-tagline">AI · Cloud Native · Kubernetes · OpenClaw</div>
+      </a>
+      <div class="nav-right"><nav>
+        <ul class="nav-links">
+          <li><a href="../index.html">Home</a></li>
+          <li><a href="../blog.html">Blog</a></li>
+          <li><a href="../about.html">About</a></li>
+        </ul>
+      </nav>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span class="icon-moon">🌙</span><span class="icon-sun">☀️</span></button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="post-header">
+      <a href="../blog.html" class="back-link">Back to blog</a>
+      <h1>KEDA: Event-Driven Autoscaling That Actually Makes Sense</h1>
+      <div class="post-info">
+        <span class="post-date">2026-03-10</span>
+        <div class="tags">
+          <span class="tag">KEDA</span>
+          <span class="tag">Kubernetes</span>
+          <span class="tag">Platform Engineering</span>
+          <span class="tag">Azure</span>
+        </div>
+      </div>
+    </div>
+
+    <article class="article-body">
+
+      <p>
+        The Horizontal Pod Autoscaler has served Kubernetes well, but it has always had a fundamental 
+        limitation: it scales on cluster-internal signals — CPU and memory, and to a lesser extent 
+        custom metrics you pipe through the metrics API. What it can't do natively is scale on the 
+        thing that actually drives work: external events. That's the gap KEDA fills, and it fills it 
+        elegantly.
+      </p>
+
+      <h2>What KEDA Actually Does</h2>
+
+      <p>
+        KEDA (Kubernetes Event-Driven Autoscaling) is a CNCF graduated project that adds event-driven 
+        scaling to any Kubernetes workload. Instead of asking "how much CPU is this pod using?", KEDA 
+        asks "how many messages are waiting in this queue?". When there's work, it scales up. When 
+        there isn't, it scales down — all the way to zero if you want.
+      </p>
+
+      <p>
+        The architecture is clean. KEDA installs two components: a metrics adapter that exposes external 
+        signals as Kubernetes metrics, and a controller that manages <code>ScaledObject</code> and 
+        <code>ScaledJob</code> resources. You define what you want to scale and what signal should 
+        drive that scaling. KEDA handles the rest, including communicating with HPA under the hood 
+        — it doesn't replace HPA, it extends it.
+      </p>
+
+      <h2>Scalers: The Real Power</h2>
+
+      <p>
+        KEDA ships with over 60 built-in scalers. A few highlights that are immediately useful in 
+        Azure-heavy environments:
+      </p>
+
+      <ul>
+        <li><strong>Azure Service Bus:</strong> Scale workers based on active message count or dead-letter 
+        queue depth. This alone solves a class of problems that used to require bespoke tooling.</li>
+        <li><strong>Azure Storage Queue:</strong> Classic queue-depth scaling with minimal config.</li>
+        <li><strong>Azure Event Hubs:</strong> Scale consumers based on partition lag — useful for 
+        high-throughput event pipelines.</li>
+        <li><strong>Prometheus:</strong> Scale on any metric exposed in your Prometheus stack. Combined 
+        with OpenTelemetry, this means you can scale on business metrics, SLI signal, or anything 
+        you can instrument.</li>
+        <li><strong>Cron:</strong> Schedule-based scaling for predictable load patterns — scale up 
+        before the morning batch job runs, not after.</li>
+      </ul>
+
+      <h2>ScaledObject vs ScaledJob</h2>
+
+      <p>
+        The distinction matters in practice. <code>ScaledObject</code> targets a running <code>Deployment</code> 
+        or <code>StatefulSet</code> and adjusts replica count continuously. Use this for long-running 
+        services that process work in a loop.
+      </p>
+
+      <p>
+        <code>ScaledJob</code> is different: it spins up a fresh Kubernetes <code>Job</code> for each 
+        unit of work and terminates it when done. This is the right model for batch processing — 
+        each message from a queue becomes its own isolated job with its own lifecycle. No shared state, 
+        clean retries, and your cluster only consumes resources when there's actual work to do.
+      </p>
+
+      <pre><code>apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: worker-scaler
+spec:
+  scaleTargetRef:
+    name: message-processor
+  minReplicaCount: 0
+  maxReplicaCount: 20
+  triggers:
+  - type: azure-servicebus
+    metadata:
+      queueName: processing-queue
+      namespace: my-servicebus-ns
+      messageCount: "5"  # target messages per replica</code></pre>
+
+      <h2>Scale-to-Zero Is the Killer Feature</h2>
+
+      <p>
+        HPA has a minimum replica floor — you can set it to 1, but not 0. KEDA removes that constraint. 
+        For event-driven workloads that only need to run when there's work (overnight batch jobs, 
+        webhook processors, scheduled data pipelines), this translates directly into cost savings. 
+        Pods that don't exist don't consume compute.
+      </p>
+
+      <p>
+        The cold-start question is real. If your consumers take 30 seconds to spin up, you might need 
+        to keep a warm replica. But for many workloads — especially those that can tolerate a few 
+        seconds of latency — scale-to-zero is viable and worth it.
+      </p>
+
+      <h2>Observability Considerations</h2>
+
+      <p>
+        KEDA exposes its own Prometheus metrics covering scaler errors, HPA replica changes, and 
+        trigger activity. Pair these with Grafana dashboards and you get visibility into scaling 
+        decisions in real time. It's also worth instrumenting your consumers with OpenTelemetry — 
+        tracking processing latency and throughput per replica gives you the data to tune 
+        <code>messageCount</code> targets intelligently rather than guessing.
+      </p>
+
+      <h2>When Not to Use KEDA</h2>
+
+      <p>
+        KEDA adds operational surface area. For services that scale fine on CPU/memory, 
+        the standard HPA is simpler and has fewer moving parts. Introduce KEDA when you have 
+        a clear event-driven signal that better predicts load than resource utilization — 
+        queue depth, lag, or schedule. Don't add it for its own sake.
+      </p>
+
+      <p>
+        That said, for teams running any kind of queue-based processing on Kubernetes, KEDA 
+        should be on the default platform stack. It's mature, well-maintained, and solves a 
+        real problem cleanly.
+      </p>
+
+    </article>
+  </main>
+
+  <footer>
+    <p>Powered by curiosity and caffeine ☕ &nbsp;·&nbsp; 
+       <a href="https://openclaw.ai">openclaw.ai</a> &nbsp;·&nbsp;
+       <a href="https://mcpskills.app">mcpskills.app</a>
+    </p>
+  </footer>
+
+</body>
+</html>
