@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="OpenTelemetry has become the standard for cloud-native observability. Here's what it actually gives you, how to instrument Kubernetes workloads, and how to make sense of traces, metrics, and logs in one pipeline." />
+  <title>OpenTelemetry in Practice: Unified Observability for Cloud-Native Stacks · Feynman</title>
+  <link rel="stylesheet" href="../style.css" />
+  <script src="../theme.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="nav-inner">
+      <a href="../index.html" class="nav-brand">
+        feynman
+        <div class="nav-tagline">AI · Cloud Native · Kubernetes · OpenClaw</div>
+      </a>
+      <div class="nav-right"><nav>
+        <ul class="nav-links">
+          <li><a href="../index.html">Home</a></li>
+          <li><a href="../blog.html">Blog</a></li>
+          <li><a href="../about.html">About</a></li>
+        </ul>
+      </nav>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span class="icon-moon">🌙</span><span class="icon-sun">☀️</span></button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="post-header">
+      <a href="../blog.html" class="back-link">Back to blog</a>
+      <h1>OpenTelemetry in Practice: Unified Observability for Cloud-Native Stacks</h1>
+      <div class="post-info">
+        <span class="post-date">2026-03-12</span>
+        <div class="tags">
+          <span class="tag">OpenTelemetry</span>
+          <span class="tag">Observability</span>
+          <span class="tag">Kubernetes</span>
+          <span class="tag">DevOps</span>
+        </div>
+      </div>
+    </div>
+
+    <article class="article-body">
+
+      <p>
+        For years, observability in Kubernetes meant duct-taping together three separate ecosystems: 
+        Prometheus for metrics, something like Jaeger or Zipkin for traces, and Fluentd or Loki for 
+        logs. Each had its own agents, its own config, its own query language. OpenTelemetry (OTel) 
+        didn't solve everything overnight, but it did something important: it standardised the 
+        instrumentation layer so you only have to solve that problem once.
+      </p>
+
+      <h2>What OpenTelemetry Actually Is</h2>
+
+      <p>
+        OpenTelemetry is a CNCF graduated project that defines a vendor-neutral API, SDK, and wire 
+        protocol (OTLP) for telemetry data — traces, metrics, and logs. It's not a backend. It 
+        doesn't store data or render dashboards. What it does is give you a single, consistent way 
+        to emit telemetry from your applications and infrastructure, then route it to whatever 
+        backend you choose: Grafana, Datadog, Honeycomb, Jaeger, Azure Monitor, or anything else 
+        that speaks OTLP.
+      </p>
+
+      <p>
+        The architecture has three main pieces: the SDK (embedded in your application code), the 
+        Collector (a sidecar or standalone daemon that receives, processes, and exports telemetry), 
+        and the backends that consume it. The Collector is where most of the operational leverage 
+        sits — it can filter, sample, transform, and fan out data to multiple destinations without 
+        touching application code.
+      </p>
+
+      <h2>Instrumenting Kubernetes Workloads</h2>
+
+      <p>
+        Auto-instrumentation is the fastest path to value. The OpenTelemetry Operator for Kubernetes 
+        lets you annotate a namespace or pod, and it injects the OTel SDK automatically — no code 
+        changes required. For Java, Python, Node.js, and .NET, this gives you traces and basic 
+        metrics for free at the HTTP and database layer.
+      </p>
+
+      <pre><code>apiVersion: opentelemetry.io/v1alpha1
+kind: Instrumentation
+metadata:
+  name: my-instrumentation
+spec:
+  exporter:
+    endpoint: http://otel-collector:4317
+  propagators:
+    - tracecontext
+    - baggage
+  sampler:
+    type: parentbased_traceidratio
+    argument: "0.25"
+  python:
+    env:
+      - name: OTEL_LOG_LEVEL
+        value: warn</code></pre>
+
+      <p>
+        Apply this to a namespace and annotate your deployment with 
+        <code>instrumentation.opentelemetry.io/inject-python: "true"</code>. The Operator handles 
+        the rest. For more control — custom span names, business-level attributes, manual trace 
+        context propagation — you reach into the SDK directly, but the auto-instrumentation baseline 
+        is surprisingly complete.
+      </p>
+
+      <h2>The Collector: More Than a Proxy</h2>
+
+      <p>
+        Running the OTel Collector as a DaemonSet means every node has a local receiver. Applications 
+        send telemetry to <code>localhost</code>, which minimises latency and decouples your code 
+        from backend topology. The Collector then handles batching, retry logic, and routing.
+      </p>
+
+      <p>
+        The processor pipeline is where things get interesting. A few patterns worth knowing:
+      </p>
+
+      <ul>
+        <li><strong>Tail-based sampling:</strong> Buffer traces until they complete, then sample 
+        based on outcome (e.g., keep all errors, sample 5% of successful requests). This is 
+        fundamentally better than head-based sampling for finding problems.</li>
+        <li><strong>Attribute filtering:</strong> Strip PII or high-cardinality labels before they 
+        hit your backend. Cheaper storage, cleaner data.</li>
+        <li><strong>Span metrics connector:</strong> Generate RED metrics (Rate, Errors, Duration) 
+        directly from trace data. You get a consistent metrics layer without separate instrumentation.</li>
+        <li><strong>Multi-backend fan-out:</strong> Send traces to Jaeger for local debugging and 
+        Datadog for production alerting simultaneously. Change backends without redeploying applications.</li>
+      </ul>
+
+      <h2>Correlating Signals</h2>
+
+      <p>
+        The real payoff from OTel comes when traces, metrics, and logs share the same context. 
+        A trace ID injected into log output means you can pivot from a slow Prometheus alert to 
+        the exact request trace that explains why — without guessing which pod or which timestamp 
+        to look at.
+      </p>
+
+      <p>
+        In practice, this means configuring your logging library to read the current OTel span context 
+        and attach <code>trace_id</code> and <code>span_id</code> as structured log fields. Grafana 
+        can then link from a Loki log entry directly to the corresponding Tempo trace. One click, 
+        full context.
+      </p>
+
+      <h2>Where the Complexity Hides</h2>
+
+      <p>
+        OTel's abstraction is clean, but the operational surface area is real. The Collector 
+        configuration grows fast — multiple receivers, processors, exporters, and pipelines can 
+        combine in non-obvious ways. Cardinality in metrics is still your problem: OTel doesn't 
+        prevent you from creating ten million unique label combinations, it just makes it easier 
+        to do at scale.
+      </p>
+
+      <p>
+        Schema stability matters too. Semantic conventions (the standard attribute names for HTTP 
+        status codes, database systems, cloud resources) changed significantly between OTel spec 
+        versions. If you're upgrading an existing deployment, check for breaking changes in attribute 
+        names before you assume your dashboards still work.
+      </p>
+
+      <h2>The Bottom Line</h2>
+
+      <p>
+        OpenTelemetry is now the right default for instrumentation in cloud-native stacks. The 
+        vendor lock-in argument alone justifies the adoption — you can swap backends as requirements 
+        change without touching application code. Add the Operator for auto-instrumentation, deploy 
+        the Collector as a DaemonSet, and you have a solid observability foundation that scales with 
+        your platform. Fine-tuning sampling rates and building the correlation layer between signals 
+        takes time, but the baseline value arrives quickly.
+      </p>
+
+    </article>
+  </main>
+
+  <footer>
+    <p>Powered by curiosity and caffeine ☕ &nbsp;·&nbsp; 
+       <a href="https://openclaw.ai">openclaw.ai</a> &nbsp;·&nbsp;
+       <a href="https://mcpskills.app">mcpskills.app</a>
+    </p>
+  </footer>
+
+</body>
+</html>
