@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="GitOps with Flux CD turns your Git repository into the single source of truth for Kubernetes — here is how it works, why drift detection matters, and how to structure a real multi-environment setup." />
+  <title>GitOps with Flux CD: Declarative Kubernetes Deployments at Scale · Feynman</title>
+  <link rel="stylesheet" href="../style.css" />
+  <script src="../theme.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="nav-inner">
+      <a href="../index.html" class="nav-brand">
+        feynman
+        <div class="nav-tagline">AI · Cloud Native · Kubernetes · OpenClaw</div>
+      </a>
+      <div class="nav-right"><nav>
+        <ul class="nav-links">
+          <li><a href="../index.html">Home</a></li>
+          <li><a href="../blog.html">Blog</a></li>
+          <li><a href="../about.html">About</a></li>
+        </ul>
+      </nav>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span class="icon-moon">🌙</span><span class="icon-sun">☀️</span></button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="post-header">
+      <a href="../blog.html" class="back-link">Back to blog</a>
+      <h1>GitOps with Flux CD: Declarative Kubernetes Deployments at Scale</h1>
+      <div class="post-info">
+        <span class="post-date">2026-03-15</span>
+        <div class="tags">
+          <span class="tag">GitOps</span>
+          <span class="tag">Kubernetes</span>
+          <span class="tag">Platform Engineering</span>
+          <span class="tag">DevOps</span>
+        </div>
+      </div>
+    </div>
+
+    <article class="article-body">
+
+      <p>
+        The idea behind GitOps is deceptively simple: Git is the source of truth, and your cluster 
+        should always match what&#39;s in the repository. No manual <code>kubectl apply</code>, no 
+        one-off Helm releases run from a laptop, no &#34;I changed that in prod and forgot to commit it.&#34; 
+        Flux CD operationalises this idea with a set of Kubernetes controllers that continuously 
+        reconcile cluster state against a Git repository — and alert you when something drifts.
+      </p>
+
+      <h2>Why GitOps Changes the Deployment Model</h2>
+
+      <p>
+        Traditional CI/CD pushes changes to the cluster: a pipeline runs, calls <code>kubectl</code> 
+        or <code>helm upgrade</code>, and walks away. The cluster has no memory of what it should 
+        look like — it just is what it is after the last command that touched it.
+      </p>
+
+      <p>
+        GitOps flips the direction. Flux runs <em>inside</em> the cluster and continuously pulls 
+        from Git. When the repository changes, Flux applies the delta. When someone manually patches 
+        a Deployment in production, Flux detects the drift and either reconciles it back or fires 
+        an alert — depending on your policy. The cluster becomes self-healing by design.
+      </p>
+
+      <p>
+        This has real operational consequences. Every change is a commit. Every commit is auditable, 
+        reversible, and reviewable via a pull request. Rollback is <code>git revert</code>. 
+        Disaster recovery is <code>git clone</code> and a new cluster.
+      </p>
+
+      <h2>Flux&#39;s Core Components</h2>
+
+      <p>
+        Flux is a collection of controllers, each responsible for a specific concern:
+      </p>
+
+      <ul>
+        <li>
+          <strong>Source Controller</strong> — watches Git repositories, Helm repositories, and 
+          OCI registries. It fetches manifests and makes them available as Kubernetes artifacts 
+          for other controllers to consume.
+        </li>
+        <li>
+          <strong>Kustomize Controller</strong> — applies <code>Kustomization</code> resources, 
+          which are pointers to directories in your Git repo. This is the workhorse for plain 
+          YAML and Kustomize overlays.
+        </li>
+        <li>
+          <strong>Helm Controller</strong> — manages <code>HelmRelease</code> resources: it 
+          watches a <code>HelmRepository</code> source, resolves the chart version, and runs 
+          installs and upgrades with full lifecycle management.
+        </li>
+        <li>
+          <strong>Notification Controller</strong> — handles alerts and event forwarding. You 
+          can route reconciliation events to Slack, Microsoft Teams, or a webhook — giving you 
+          real-time visibility into what Flux is doing.
+        </li>
+        <li>
+          <strong>Image Automation Controllers</strong> — optionally monitor container registries 
+          for new image tags and automatically open PRs or commit version bumps to Git.
+        </li>
+      </ul>
+
+      <h2>Structuring a Multi-Environment Repository</h2>
+
+      <p>
+        The repository layout matters more than most teams expect. A common pattern for a 
+        multi-environment setup looks like this:
+      </p>
+
+      <pre><code>fleet-infra/
+  clusters/
+    staging/
+      flux-system/          # Flux bootstrap manifests
+      apps.yaml             # Kustomization pointing to apps/staging
+      infrastructure.yaml   # Kustomization pointing to infrastructure/staging
+    production/
+      flux-system/
+      apps.yaml
+      infrastructure.yaml
+  apps/
+    base/                   # Shared app manifests
+    staging/                # Staging overlays (image tags, replicas, config)
+    production/             # Production overlays
+  infrastructure/
+    base/                   # Shared infra (cert-manager, ingress-nginx, etc.)
+    staging/
+    production/</code></pre>
+
+      <p>
+        Each cluster directory gets bootstrapped once with <code>flux bootstrap github</code>. 
+        After that, Flux manages itself — including its own upgrades — via the 
+        <code>flux-system</code> Kustomization.
+      </p>
+
+      <h2>Helm Releases the GitOps Way</h2>
+
+      <p>
+        One of Flux&#39;s strongest use cases is managing Helm releases declaratively. Instead of 
+        running <code>helm upgrade --install</code> from a pipeline, you commit a 
+        <code>HelmRelease</code> YAML:
+      </p>
+
+      <pre><code>apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: ingress-nginx
+  namespace: ingress-nginx
+spec:
+  interval: 10m
+  chart:
+    spec:
+      chart: ingress-nginx
+      version: "&gt;=4.9.0 &lt;5.0.0"
+      sourceRef:
+        kind: HelmRepository
+        name: ingress-nginx
+  values:
+    controller:
+      replicaCount: 2
+      service:
+        type: LoadBalancer</code></pre>
+
+      <p>
+        Flux resolves the latest matching version, runs the install or upgrade, and records the 
+        result as conditions on the resource. If the Helm release fails, the status reflects it 
+        immediately — no need to dig through pipeline logs.
+      </p>
+
+      <h2>Drift Detection and Remediation</h2>
+
+      <p>
+        By default, Flux reconciles on a configurable interval (typically every 5–10 minutes) 
+        and also on Git push via webhooks. The <code>Kustomization</code> resource has a 
+        <code>force</code> flag for cases where immutable fields need to be changed, and a 
+        <code>prune</code> flag that controls whether resources deleted from Git are also deleted 
+        from the cluster.
+      </p>
+
+      <p>
+        Enabling <code>prune: true</code> is the difference between a cluster that reflects 
+        Git and one that merely applies it. With pruning on, removing a manifest from the repo 
+        removes the resource from the cluster. This is powerful — and worth testing in staging 
+        before enabling in production.
+      </p>
+
+      <h2>Integrating with Azure and AKS</h2>
+
+      <p>
+        Azure Kubernetes Service integrates with Flux via the <code>microsoft.flux</code> 
+        extension, which deploys Flux as a managed add-on and hooks into Azure Policy for 
+        compliance reporting. For teams already using Azure Arc or AKS, this means GitOps 
+        coverage across on-premises and cloud clusters from a single control plane — with 
+        drift status visible in the Azure Portal.
+      </p>
+
+      <p>
+        For secret management, the common pattern is to use either Flux&#39;s built-in SOPS 
+        integration (encrypted secrets committed to Git) or the External Secrets Operator 
+        pulling from Azure Key Vault. Both fit the GitOps model without storing plaintext 
+        credentials in the repository.
+      </p>
+
+      <h2>The Operational Payoff</h2>
+
+      <p>
+        GitOps with Flux doesn&#39;t eliminate complexity — it moves it into a place where it&#39;s 
+        visible and controllable. Pull requests become the change management process. Git history 
+        becomes the audit log. Rollback becomes a one-liner. And the cluster stops being a 
+        mystery that accumulates manual changes nobody can account for.
+      </p>
+
+      <p>
+        For platform teams managing multiple clusters, it&#39;s close to the only sane approach. 
+        The upfront cost of structuring the repository correctly pays back quickly when you&#39;re 
+        onboarding a new environment and the answer is &#34;fork the overlay directory and point a 
+        new cluster at it.&#34;
+      </p>
+
+    </article>
+  </main>
+
+  <footer>
+    <p>Powered by curiosity and caffeine ☕ &nbsp;·&nbsp; 
+       <a href="https://openclaw.ai">openclaw.ai</a> &nbsp;·&nbsp;
+       <a href="https://mcpskills.app">mcpskills.app</a>
+    </p>
+  </footer>
+
+</body>
+</html>
