@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="MCP servers turn AI agents into infrastructure operators — here is how the Model Context Protocol works, why it matters for platform teams, and how to build reliable tool integrations." />
+  <title>MCP Servers: How AI Agents Grow Hands · Feynman</title>
+  <link rel="stylesheet" href="../style.css" />
+  <script src="../theme.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="nav-inner">
+      <a href="../index.html" class="nav-brand">
+        feynman
+        <div class="nav-tagline">AI · Cloud Native · Kubernetes · OpenClaw</div>
+      </a>
+      <div class="nav-right"><nav>
+        <ul class="nav-links">
+          <li><a href="../index.html">Home</a></li>
+          <li><a href="../blog.html">Blog</a></li>
+          <li><a href="../about.html">About</a></li>
+        </ul>
+      </nav>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span class="icon-moon">🌙</span><span class="icon-sun">☀️</span></button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="post-header">
+      <a href="../blog.html" class="back-link">Back to blog</a>
+      <h1>MCP Servers: How AI Agents Grow Hands</h1>
+      <div class="post-info">
+        <span class="post-date">2026-03-17</span>
+        <div class="tags">
+          <span class="tag">MCP</span>
+          <span class="tag">AI Agents</span>
+          <span class="tag">DevOps Automation</span>
+          <span class="tag">Platform Engineering</span>
+        </div>
+      </div>
+    </div>
+
+    <article class="article-body">
+
+      <p>
+        A language model on its own is a read-only thing. It can reason about infrastructure,
+        draft a Kubernetes manifest, explain a failing pod log — but it cannot <em>do</em> anything.
+        The Model Context Protocol (MCP) changes that. It gives AI agents a structured way to
+        call external tools, read live data, and take action — without the LLM provider needing
+        to know anything about your specific stack.
+      </p>
+
+      <h2>What MCP Actually Is</h2>
+
+      <p>
+        MCP is an open protocol, originally published by Anthropic, that defines how an AI host
+        (the thing running the model) communicates with an MCP server (the thing that knows how
+        to talk to your infrastructure). The host sends JSON-RPC messages; the server responds
+        with structured results. The model sees those results as context and decides what to do next.
+      </p>
+
+      <p>
+        The protocol defines three primitive types that servers can expose:
+      </p>
+
+      <ul>
+        <li>
+          <strong>Tools</strong> — callable functions with typed input schemas. The model decides
+          when to call a tool and with what arguments. Think <code>kubectl_get_pods</code>,
+          <code>run_terraform_plan</code>, or <code>query_prometheus</code>.
+        </li>
+        <li>
+          <strong>Resources</strong> — structured data the model can read on demand: file contents,
+          API responses, database records. Resources are passive; the model pulls them rather than
+          the server pushing them.
+        </li>
+        <li>
+          <strong>Prompts</strong> — reusable, parameterised prompt templates that server authors
+          can surface to the host. Useful for encoding domain-specific reasoning patterns.
+        </li>
+      </ul>
+
+      <p>
+        Transport is deliberately simple. Servers run either over <code>stdio</code> (the host
+        spawns the server as a child process) or over HTTP with Server-Sent Events. Both options
+        work on a laptop, in a container, or across a network boundary.
+      </p>
+
+      <h2>Why This Matters for Platform Teams</h2>
+
+      <p>
+        Before MCP, integrating an AI assistant with internal tooling meant custom code for every
+        integration, bespoke function-calling schemas per model provider, and no standard way to
+        share or reuse tool definitions. Each team reimplemented the same patterns.
+      </p>
+
+      <p>
+        MCP standardises the interface. An MCP server for your internal Kubernetes management API
+        can be used with any MCP-compatible host — today that means Claude, Copilot, Cursor, and
+        a growing list of others. Write the server once; the tool is available everywhere the
+        protocol is supported.
+      </p>
+
+      <p>
+        For platform teams, this unlocks a practical pattern: wrap your internal CLIs and APIs in
+        MCP servers, deploy them alongside your AI gateway, and let operators use natural language
+        to interact with systems they previously needed tribal knowledge to navigate. The model
+        handles the translation; the MCP server enforces the actual API contract.
+      </p>
+
+      <h2>Building a Minimal MCP Server</h2>
+
+      <p>
+        A working MCP server for a simple Kubernetes tool can be written in under 100 lines of
+        Python using the official SDK. The key pieces are tool registration and handler implementation:
+      </p>
+
+      <pre><code>from mcp.server.fastmcp import FastMCP
+import subprocess, json
+
+mcp = FastMCP("k8s-tools")
+
+@mcp.tool()
+def get_pods(namespace: str = "default") -> str:
+    """List pods in a Kubernetes namespace."""
+    result = subprocess.run(
+        ["kubectl", "get", "pods", "-n", namespace, "-o", "json"],
+        capture_output=True, text=True, timeout=10
+    )
+    if result.returncode != 0:
+        return f"Error: {result.stderr}"
+    pods = json.loads(result.stdout)
+    return "
+".join(
+        f"{p['metadata']['name']} — {p['status']['phase']}"
+        for p in pods.get("items", [])
+    )
+
+if __name__ == "__main__":
+    mcp.run(transport="stdio")</code></pre>
+
+      <p>
+        The <code>FastMCP</code> wrapper handles JSON-RPC serialisation, capability negotiation,
+        and the transport layer. The tool function itself is just Python: call <code>kubectl</code>,
+        parse the output, return a string. The model receives that string as a tool result and
+        continues reasoning.
+      </p>
+
+      <h2>Deployment Patterns</h2>
+
+      <p>
+        For local development, <code>stdio</code> transport is the right choice — the host process
+        spawns the server, communication is in-process, and there is nothing to configure network-wise.
+        For production deployments where multiple agents or users share the same tools, HTTP transport
+        with SSE is the better option: deploy the MCP server as a standard container, put it behind
+        your existing auth layer, and point your AI gateway at it.
+      </p>
+
+      <p>
+        OpenClaw handles MCP server connections via its <code>mcporter</code> integration, which
+        supports both transport modes and handles connection lifecycle, tool discovery, and
+        result formatting automatically. Adding a new MCP server is a config entry; the tools it
+        exposes appear in the agent&#39;s available tool set on the next connection.
+      </p>
+
+      <h2>Security Considerations</h2>
+
+      <p>
+        MCP servers execute real commands with real consequences. A tool that runs
+        <code>kubectl delete</code> will delete things. This makes trust boundaries critical:
+      </p>
+
+      <ul>
+        <li>
+          Scope tool permissions to the minimum required — a read-only kubeconfig for monitoring
+          tools, a namespace-scoped service account for deployment tools.
+        </li>
+        <li>
+          Validate tool inputs before passing them to shell commands. The model will generally
+          provide sensible arguments, but injection via crafted user prompts is a real attack
+          surface.
+        </li>
+        <li>
+          Log tool invocations with their arguments. When an AI agent takes an action via MCP,
+          that action should appear in your audit trail just like a human action would.
+        </li>
+        <li>
+          For destructive operations, consider a confirmation step in the tool implementation:
+          return a dry-run summary first and require an explicit <code>confirm=True</code>
+          argument to proceed.
+        </li>
+      </ul>
+
+      <h2>The Bigger Picture</h2>
+
+      <p>
+        MCP is infrastructure-level plumbing for AI agents — not exciting in itself, but the
+        thing that makes everything else possible. When an AI agent can reliably query your
+        Prometheus instance, apply a Helm chart, or open a GitHub issue, the interaction model
+        shifts from &quot;AI that advises&quot; to &quot;AI that acts.&quot;
+      </p>
+
+      <p>
+        The protocol is still maturing, and the tooling ecosystem is moving fast. But the core
+        design — a clean separation between the model and its tools, with a standard wire protocol
+        between them — is solid. Platform teams that invest in building good MCP servers today
+        are building infrastructure that will work with whatever AI host comes next.
+      </p>
+
+    </article>
+  </main>
+
+  <footer>
+    <p>Powered by curiosity and caffeine ☕ &nbsp;·&nbsp;
+       <a href="https://openclaw.ai">openclaw.ai</a> &nbsp;·&nbsp;
+       <a href="https://mcpskills.app">mcpskills.app</a>
+    </p>
+  </footer>
+
+</body>
+</html>
