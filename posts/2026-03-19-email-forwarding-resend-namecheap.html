@@ -256,19 +256,114 @@ send  TXT  "v=spf1 include:amazonses.com ~all"</code></pre>
         <li><strong>Total</strong>: $0/month for a contact form that sends email from your own domain</li>
       </ul>
 
+      <h2>⚠️ Gotcha #2: Don't Send to Your Own Forwarding Address</h2>
+
+      <p>
+        Here's one that bit us in production and took a while to diagnose. The contact form
+        was configured to send FROM <code>hello@yourdomain.com</code> TO <code>hello@yourdomain.com</code>.
+        Logical, right? That's the inbox you want submissions in.
+      </p>
+
+      <p>
+        Wrong. When Resend delivers to <code>hello@yourdomain.com</code>, it hits your MX records
+        — the Namecheap forwarding servers. But the MX records we added for Resend were still
+        propagating. During that window, every submission bounced silently. The edge function
+        returned <code>{"success":true}</code> because it was swallowing Resend's error response.
+        From the frontend, everything looked fine. From the inbox: nothing.
+      </p>
+
+      <p>
+        The fix is simple: <strong>send directly to the real destination inbox</strong>, not to
+        the forwarding alias. If you want submissions at <code>you@gmail.com</code>, use that
+        as the <code>to</code> address. The forwarding alias is for humans sending you email —
+        not for your own transactional mail loop.
+      </p>
+
+      <pre><code>// ❌ This will bounce during DNS propagation (and possibly forever if there's a loop)
+to: "hello@yourdomain.com"
+
+// ✅ Send directly to the real inbox
+to: "you@gmail.com"</code></pre>
+
+      <p>
+        You can always make this configurable via an environment variable so you can change
+        it without redeploying the function.
+      </p>
+
+      <h2>⚠️ Gotcha #3: success:true Doesn't Mean It Worked</h2>
+
+      <p>
+        Always check your edge function actually propagates errors from Resend. A common
+        mistake is catching the response but returning success regardless:
+      </p>
+
+      <pre><code>// ❌ Hides errors
+const data = await resend.send(...);
+return new Response(JSON.stringify({ success: true }));
+
+// ✅ Surfaces errors
+const res = await fetch("https://api.resend.com/emails", { ... });
+const data = await res.json();
+if (!res.ok) {
+  return new Response(JSON.stringify({ error: data }), { status: res.status });
+}
+return new Response(JSON.stringify({ success: true, id: data.id }));</code></pre>
+
+      <p>
+        Debugging is also easier with the Resend API directly — check your send log:
+      </p>
+
+      <pre><code>curl -s -H "Authorization: Bearer re_yourkey" \
+  "https://api.resend.com/emails" | jq '.data[] | .subject + " — " + .last_event'</code></pre>
+
+      <p>
+        This shows every email you've sent and its last event: <code>delivered</code>,
+        <code>bounced</code>, <code>opened</code>. Invaluable for diagnosing silent failures
+        without needing access to Supabase logs.
+      </p>
+
+      <h2>Bonus: Persist Submissions to Supabase</h2>
+
+      <p>
+        While you're in the edge function, it's trivial to also save every submission to a
+        Supabase table — giving you a lightweight CRM record of everyone who's contacted you.
+        Create a <code>contact_submissions</code> table and insert before (or after) sending:
+      </p>
+
+      <pre><code>import { createClient } from "https://esm.sh/@supabase/supabase-js";
+
+const supabase = createClient(
+  Deno.env.get("SUPABASE_URL")!,
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+);
+
+await supabase.from("contact_submissions").insert({
+  name, email, company, interest, message,
+  created_at: new Date().toISOString(),
+});</code></pre>
+
+      <p>
+        Use the service role key (not the anon key) in edge functions — it bypasses RLS and
+        lets the function write regardless of auth state. Set strict RLS on the table so only
+        authenticated users (you) can read it via the dashboard.
+      </p>
+
       <h2>Key Takeaways</h2>
 
       <ol>
         <li><strong>Read before writing DNS.</strong> <code>setHosts</code> is destructive. Always fetch existing records first.</li>
         <li><strong>Receiving and sending are separate systems.</strong> Namecheap MX for inbound forwarding, Resend DKIM for outbound sending — they coexist fine.</li>
         <li><strong>Never expose API keys client-side.</strong> Supabase Edge Functions or any serverless proxy handles this cleanly.</li>
-        <li><strong>Test the API directly first.</strong> Confirm the key and domain work before debugging the frontend.</li>
+        <li><strong>Don't send to your own forwarding alias.</strong> Use the real destination inbox as the <code>to</code> address — forwarding adds latency, failure modes, and potential loops.</li>
+        <li><strong>Surface errors properly.</strong> <code>success:true</code> from your edge function should only fire when Resend confirms delivery, not unconditionally.</li>
+        <li><strong>Use the Resend API log.</strong> <code>GET /emails</code> shows every send and its status — faster than digging through Supabase logs for silent failures.</li>
         <li><strong>Pick EU regions where possible.</strong> Resend's EU West (Frankfurt) region keeps email infrastructure inside European jurisdiction — relevant if you're building for regulated industries.</li>
       </ol>
 
       <p>
-        The whole setup takes about 30 minutes end-to-end, propagation included.
-        Not bad for a production-grade email stack with zero mail server maintenance.
+        The whole setup takes about 45 minutes end-to-end, debugging included.
+        Not bad for a production-grade email stack with zero mail server maintenance —
+        and a submission log you actually control.
       </p>
 
     </article>
