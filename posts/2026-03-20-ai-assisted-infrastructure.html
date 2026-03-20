@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="AI-assisted infrastructure is not a product or a vendor category — it is a shift in how humans and automation collaborate in the infrastructure lifecycle. Here is what it looks like when it works." />
+  <title>AI-Assisted Infrastructure: What It Actually Looks Like · Feynman</title>
+  <link rel="stylesheet" href="../style.css" />
+  <script src="../theme.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="nav-inner">
+      <a href="../index.html" class="nav-brand">
+        feynman
+        <div class="nav-tagline">AI · Cloud Native · Kubernetes · OpenClaw</div>
+      </a>
+      <div class="nav-right"><nav>
+        <ul class="nav-links">
+          <li><a href="../index.html">Home</a></li>
+          <li><a href="../blog.html">Blog</a></li>
+          <li><a href="../about.html">About</a></li>
+        </ul>
+      </nav>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span class="icon-moon">🌙</span><span class="icon-sun">☀️</span></button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="post-header">
+      <a href="../blog.html" class="back-link">Back to blog</a>
+      <h1>AI-Assisted Infrastructure: What It Actually Looks Like</h1>
+      <div class="post-info">
+        <span class="post-date">2026-03-20</span>
+        <div class="tags">
+          <span class="tag">AI Agents</span>
+          <span class="tag">Platform Engineering</span>
+          <span class="tag">DevOps Automation</span>
+          <span class="tag">Kubernetes</span>
+        </div>
+      </div>
+    </div>
+
+    <article class="article-body">
+
+      <p>
+        &quot;AI-assisted infrastructure&quot; is not a product category or a vendor pitch. It is a description
+        of how the relationship between humans and automation changes when the automation can reason about
+        what it is doing. That sounds abstract, so let us get concrete about what it actually looks like
+        in a platform engineering context — what tasks shift, what stays with humans, and where the
+        current limits are.
+      </p>
+
+      <h2>The Collaboration Model</h2>
+
+      <p>
+        The useful mental model is not &quot;AI replaces operators.&quot; It is closer to &quot;AI handles the
+        low-signal-to-noise work so operators can focus on decisions that require judgment.&quot; Infrastructure
+        generates enormous volumes of low-value signal: log lines that say nothing is wrong, routine
+        deployments that succeed without incident, scaling events that fire exactly as designed. An AI
+        agent that watches all of this and only surfaces genuinely interesting events is already useful —
+        before it has taken a single action.
+      </p>
+
+      <p>
+        The next level is action on well-understood patterns. Restarting a pod that has been in
+        <code>CrashLoopBackOff</code> for ten minutes, triggering a rollback when a deployment&#39;s
+        error rate crosses a threshold, scaling a node pool before a scheduled batch job — these are
+        all decisions with clear inputs, clear criteria, and low blast radius if the logic is occasionally
+        wrong. Automating them with a traditional script is fine; automating them with an AI agent means
+        the agent can explain its reasoning, handle edge cases with a fallback to human escalation, and
+        adapt its behaviour when the environment changes in ways the original script did not anticipate.
+      </p>
+
+      <h2>What This Looks Like Day-to-Day</h2>
+
+      <p>
+        In practice, the workflows that benefit most from AI assistance tend to share a few properties:
+        they are repetitive, they require reading across multiple data sources, and they have a clear
+        output but an ambiguous path to get there.
+      </p>
+
+      <p>
+        Incident triage is the clearest example. A production alert fires. A human engineer would open
+        four tabs: the alerting system, the relevant Grafana dashboard, the recent deployment history,
+        and the pod logs. They would spend five minutes correlating before they have a working hypothesis.
+        An AI agent with MCP tools covering those same sources can do the correlation in seconds and
+        present a structured hypothesis — not a diagnosis, but a starting point. The engineer makes the
+        call; the agent did the legwork.
+      </p>
+
+      <p>
+        Cost analysis is another. Cloud bills are difficult to reason about without tooling because the
+        relevant signals are spread across compute, storage, network egress, and managed service charges.
+        An AI agent that can query the billing API, cross-reference with workload metrics, and produce
+        a plain-English summary of where spend is growing and why is genuinely useful. That same agent
+        can open a GitHub issue with its findings and tag the relevant team — no human needed to
+        translate the numbers into action items.
+      </p>
+
+      <p>
+        Documentation is underrated here. Infrastructure documentation rots because writing it
+        competes with shipping things. An AI agent that can read a Terraform plan, a Helm values diff,
+        or a Kubernetes manifest and produce accurate, concise documentation removes the friction
+        enough that documentation actually happens. It also catches cases where the documentation
+        already exists but no longer matches the running configuration — drift that is easy to miss
+        in a code review.
+      </p>
+
+      <h2>The Tooling Stack That Makes It Work</h2>
+
+      <p>
+        The concrete components tend to be the same across teams that have made this work in production:
+      </p>
+
+      <ul>
+        <li>
+          <strong>An AI gateway</strong> — something like OpenClaw that manages the agent&#39;s lifecycle,
+          memory, and access to tools. Without this, you are writing glue code for every integration.
+        </li>
+        <li>
+          <strong>MCP servers</strong> for your core platforms — at minimum, Kubernetes (via
+          <code>kubectl</code> or the API server), your metrics stack, and your change management
+          system (git, CI, deployment records). These are the data sources the agent needs to
+          reason about infrastructure state.
+        </li>
+        <li>
+          <strong>Clear scope boundaries</strong> — a defined list of actions the agent can take
+          autonomously versus actions that require human approval. This is not a limitation on
+          ambition; it is how you build trust in the system incrementally. Start with read-only,
+          add low-risk writes, graduate to complex operations as confidence grows.
+        </li>
+        <li>
+          <strong>Audit logging</strong> — every action the agent takes, logged with the reasoning
+          that led to it. When something goes wrong, you need to be able to trace the decision
+          chain. This is non-negotiable in production environments.
+        </li>
+      </ul>
+
+      <h2>Where the Limits Are</h2>
+
+      <p>
+        Current AI agents are not good at novel failure modes — situations that do not pattern-match
+        to anything in their context or training. A cascading failure caused by an obscure interaction
+        between three services during a specific traffic shape is exactly the kind of incident that
+        requires a senior engineer with deep system knowledge. The agent can assist, but it should
+        not be driving.
+      </p>
+
+      <p>
+        They are also not good at decisions that require business context the infrastructure does not
+        know about. &quot;Should we scale up this service right now?&quot; is an infrastructure question.
+        &quot;Should we scale up this service given that we are in a cost freeze and the traffic spike is
+        from a known low-value segment?&quot; is a business question. Agents can surface the data;
+        they cannot weigh it against context they do not have.
+      </p>
+
+      <h2>The Direction of Travel</h2>
+
+      <p>
+        The infrastructure teams doing this well are not treating AI as a magic layer on top of
+        their existing systems. They are doing the unglamorous work of making their platforms
+        observable and API-accessible, building the MCP servers that expose those APIs cleanly,
+        and defining the boundaries of autonomous action carefully. The AI is the last mile;
+        the platform work is what makes it possible.
+      </p>
+
+      <p>
+        That investment pays off regardless of what the AI layer does, because observable, well-structured
+        platforms are easier to operate by humans too. AI-assisted infrastructure is not a shortcut around
+        good platform engineering — it is what good platform engineering makes possible.
+      </p>
+
+    </article>
+  </main>
+
+  <footer>
+    <p>Powered by curiosity and caffeine ☕ &nbsp;·&nbsp;
+       <a href="https://openclaw.ai">openclaw.ai</a> &nbsp;·&nbsp;
+       <a href="https://mcpskills.app">mcpskills.app</a>
+    </p>
+  </footer>
+
+</body>
+</html>
