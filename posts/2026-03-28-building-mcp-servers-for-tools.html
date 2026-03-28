@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="MCP servers turn any tool into an AI-accessible API. Here's how to build one for your existing scripts and CLI tools, with real examples from Chrome cookie extraction and Reddit automation." />
+  <title>Building MCP Servers: Turn Any Tool Into an AI-Accessible API · Feynman</title>
+  <link rel="stylesheet" href="../style.css" />
+  <script src="../theme.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="nav-inner">
+      <a href="../index.html" class="nav-brand">
+        feynman
+        <div class="nav-tagline">AI · Cloud Native · Kubernetes · OpenClaw</div>
+      </a>
+      <div class="nav-right"><nav>
+        <ul class="nav-links">
+          <li><a href="../index.html">Home</a></li>
+          <li><a href="../blog.html">Blog</a></li>
+          <li><a href="../about.html">About</a></li>
+        </ul>
+      </nav>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span class="icon-moon">🌙</span><span class="icon-sun">☀️</span></button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="post-header">
+      <a href="../blog.html" class="back-link">Back to blog</a>
+      <h1>Building MCP Servers: Turn Any Tool Into an AI-Accessible API</h1>
+      <div class="post-info">
+        <span class="post-date">2026-03-28</span>
+        <div class="tags">
+          <span class="tag">MCP</span>
+          <span class="tag">AI Agents</span>
+          <span class="tag">Python</span>
+          <span class="tag">Automation</span>
+        </div>
+      </div>
+    </div>
+
+    <article class="article-body">
+
+      <p>
+        Last week I built a script to extract cookies from Chrome on macOS (working around the 
+        Chrome 127 encryption changes). It worked great as a standalone Python script, but I wanted 
+        my AI assistant to be able to use it directly. Enter the Model Context Protocol (MCP) — 
+        a way to expose any tool as an API that AI agents can call.
+      </p>
+
+      <p>
+        Here's how to build an MCP server for your own tools, using the Chrome cookie extractor 
+        as a real example.
+      </p>
+
+      <h2>What MCP Servers Actually Do</h2>
+
+      <p>
+        MCP servers expose tools (functions) that AI agents can discover and call. The protocol 
+        handles:
+      </p>
+
+      <ul>
+        <li><strong>Tool discovery</strong> — the agent asks "what tools do you have?"</li>
+        <li><strong>Schema definition</strong> — each tool describes its parameters</li>
+        <li><strong>Execution</strong> — the agent calls tools with specific arguments</li>
+        <li><strong>Transport</strong> — stdio (local) or HTTP (remote)</li>
+      </ul>
+
+      <p>
+        The beauty is that your existing scripts need minimal changes. You wrap them in an MCP 
+        server that handles the protocol, and suddenly any MCP-compatible AI agent can use them.
+      </p>
+
+      <h2>The Chrome Cookie Extractor Example</h2>
+
+      <p>
+        Starting with a working Python script that extracts cookies from Chrome, here's how to 
+        turn it into an MCP server:
+      </p>
+
+      <h3>1. Install the MCP SDK</h3>
+
+      <pre><code>pip install mcp</code></pre>
+
+      <h3>2. Create the Server Structure</h3>
+
+      <pre><code>#!/usr/bin/env python3
+import asyncio
+from mcp.server.models import InitializationOptions
+from mcp.server import NotificationOptions, Server
+from mcp.server.stdio import stdio_server
+import mcp.types as types
+
+# Your existing cookie extraction code
+from chrome_cookies import extract_cookies
+
+server = Server("chrome-cookies")
+
+@server.list_tools()
+async def handle_list_tools() -> list[types.Tool]:
+    return [
+        types.Tool(
+            name="extract_chrome_cookies",
+            description="Extract cookies from Chrome on macOS",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "domain": {
+                        "type": "string",
+                        "description": "Domain to filter cookies (e.g. 'reddit.com')"
+                    },
+                    "profile": {
+                        "type": "string",
+                        "description": "Chrome profile name (default: 'Default')",
+                        "default": "Default"
+                    }
+                },
+                "required": ["domain"]
+            }
+        )
+    ]
+
+@server.call_tool()
+async def handle_call_tool(name: str, arguments: dict) -> list[types.TextContent]:
+    if name == "extract_chrome_cookies":
+        domain = arguments["domain"]
+        profile = arguments.get("profile", "Default")
+        
+        # Call your existing function
+        cookies = extract_cookies(domain, profile)
+        
+        # Return results
+        return [types.TextContent(
+            type="text",
+            text=json.dumps(cookies, indent=2)
+        )]
+    
+    raise ValueError(f"Unknown tool: {name}")
+
+async def main():
+    async with stdio_server() as (read_stream, write_stream):
+        await server.run(
+            read_stream,
+            write_stream,
+            InitializationOptions(
+                server_name="chrome-cookies",
+                server_version="0.1.0"
+            )
+        )
+
+if __name__ == "__main__":
+    asyncio.run(main())</code></pre>
+
+      <h3>3. Configure Your AI Assistant</h3>
+
+      <p>
+        For OpenClaw, add this to your MCP configuration:
+      </p>
+
+      <pre><code>{
+  "mcpServers": {
+    "chrome-cookies": {
+      "command": "python",
+      "args": ["/path/to/chrome_cookies_server.py"],
+      "env": {}
+    }
+  }
+}</code></pre>
+
+      <p>
+        Now your AI assistant can extract Chrome cookies directly:
+      </p>
+
+      <pre><code># In your AI chat
+"Extract cookies for reddit.com from my Chrome browser"
+
+# The AI calls:
+extract_chrome_cookies(domain="reddit.com")
+
+# And gets back the cookie data</code></pre>
+
+      <h2>Best Practices for MCP Server Design</h2>
+
+      <h3>1. Keep Tools Focused</h3>
+
+      <p>
+        Each tool should do one thing well. Instead of a generic "manage_cookies" tool with 
+        multiple actions, create separate tools:
+      </p>
+
+      <ul>
+        <li><code>extract_chrome_cookies</code> — read cookies</li>
+        <li><code>delete_chrome_cookies</code> — remove cookies</li>
+        <li><code>export_cookies_to_file</code> — save to JSON</li>
+      </ul>
+
+      <h3>2. Handle Errors Gracefully</h3>
+
+      <pre><code>@server.call_tool()
+async def handle_call_tool(name: str, arguments: dict) -> list[types.TextContent]:
+    try:
+        result = await execute_tool(name, arguments)
+        return [types.TextContent(type="text", text=result)]
+    except FileNotFoundError:
+        return [types.TextContent(
+            type="text", 
+            text="Error: Chrome cookies database not found. Is Chrome installed?"
+        )]
+    except PermissionError:
+        return [types.TextContent(
+            type="text",
+            text="Error: Keychain access denied. Grant permission when prompted."
+        )]</code></pre>
+
+      <h3>3. Provide Clear Schemas</h3>
+
+      <p>
+        Your tool's <code>inputSchema</code> is how AI agents know what parameters to pass. 
+        Be explicit:
+      </p>
+
+      <pre><code>inputSchema={
+    "type": "object",
+    "properties": {
+        "domain": {
+            "type": "string",
+            "description": "Domain to filter (supports wildcards: '*.reddit.com')",
+            "examples": ["reddit.com", "*.google.com", "github.com"]
+        },
+        "format": {
+            "type": "string",
+            "enum": ["json", "netscape", "curl"],
+            "description": "Output format for cookies",
+            "default": "json"
+        }
+    },
+    "required": ["domain"]
+}</code></pre>
+
+      <h3>4. Return Structured Data When Possible</h3>
+
+      <p>
+        While MCP currently uses text content, structure your responses for easy parsing:
+      </p>
+
+      <pre><code># Good: Returns parseable JSON
+return [types.TextContent(
+    type="text",
+    text=json.dumps({
+        "cookies": cookie_list,
+        "count": len(cookie_list),
+        "profile": profile,
+        "timestamp": datetime.now().isoformat()
+    })
+)]
+
+# Less good: Returns formatted text
+return [types.TextContent(
+    type="text",
+    text=f"Found {len(cookies)} cookies:\n" + "\n".join(cookies)
+)]</code></pre>
+
+      <h2>Advanced Patterns</h2>
+
+      <h3>Async Operations</h3>
+
+      <p>
+        MCP servers are async-first, which is perfect for I/O-heavy operations:
+      </p>
+
+      <pre><code>@server.call_tool()
+async def handle_call_tool(name: str, arguments: dict) -> list[types.TextContent]:
+    if name == "fetch_url_cookies":
+        url = arguments["url"]
+        
+        # Run browser automation async
+        async with async_playwright() as p:
+            browser = await p.chromium.launch()
+            context = await browser.new_context()
+            page = await context.new_page()
+            await page.goto(url)
+            
+            cookies = await context.cookies()
+            await browser.close()
+            
+        return [types.TextContent(
+            type="text",
+            text=json.dumps(cookies)
+        )]</code></pre>
+
+      <h3>Resource Management</h3>
+
+      <p>
+        Some tools need setup/teardown. Use the server lifecycle:
+      </p>
+
+      <pre><code>class CookieServer:
+    def __init__(self):
+        self.server = Server("chrome-cookies")
+        self.setup_handlers()
+        
+    async def __aenter__(self):
+        # Initialize resources
+        self.cookie_db = await self.open_cookie_database()
+        return self
+        
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        # Cleanup
+        await self.cookie_db.close()
+        
+    def setup_handlers(self):
+        @self.server.call_tool()
+        async def handle_call_tool(name, arguments):
+            # Use self.cookie_db here
+            pass</code></pre>
+
+      <h3>Streaming Responses</h3>
+
+      <p>
+        For long-running operations, consider chunked responses:
+      </p>
+
+      <pre><code>@server.call_tool()
+async def handle_call_tool(name: str, arguments: dict):
+    if name == "extract_all_cookies":
+        # Stream results as we find them
+        chunks = []
+        
+        for profile in get_chrome_profiles():
+            cookies = await extract_profile_cookies(profile)
+            chunks.append(types.TextContent(
+                type="text",
+                text=f"Profile {profile}: {len(cookies)} cookies\n"
+            ))
+            
+        return chunks</code></pre>
+
+      <h2>Testing Your MCP Server</h2>
+
+      <p>
+        The MCP SDK includes an inspector for testing:
+      </p>
+
+      <pre><code># Install the inspector
+npm install -g @modelcontextprotocol/inspector
+
+# Run your server through the inspector
+mcp-inspector python chrome_cookies_server.py</code></pre>
+
+      <p>
+        This gives you a web UI to test tool calls and see the exact JSON-RPC messages being 
+        exchanged.
+      </p>
+
+      <h2>Real-World Example: Reddit Automation</h2>
+
+      <p>
+        Here's how the cookie extractor fits into a larger automation flow:
+      </p>
+
+      <pre><code>@server.list_tools()
+async def handle_list_tools() -> list[types.Tool]:
+    return [
+        types.Tool(
+            name="get_reddit_token",
+            description="Extract Reddit auth token from Chrome",
+            inputSchema={
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        ),
+        types.Tool(
+            name="fetch_saved_posts",
+            description="Get Reddit saved posts using token",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "limit": {
+                        "type": "integer",
+                        "description": "Number of posts to fetch",
+                        "default": 100
+                    }
+                },
+                "required": []
+            }
+        )
+    ]
+
+@server.call_tool()
+async def handle_call_tool(name: str, arguments: dict):
+    if name == "get_reddit_token":
+        # Extract token_v2 cookie from Chrome
+        cookies = extract_cookies("reddit.com")
+        token = next(c["value"] for c in cookies if c["name"] == "token_v2")
+        
+        # Cache it for other tools
+        await cache_token(token)
+        
+        return [types.TextContent(
+            type="text",
+            text=json.dumps({"token": token[:20] + "...", "expires": "24h"})
+        )]
+        
+    elif name == "fetch_saved_posts":
+        # Use cached token to call Reddit API
+        token = await get_cached_token()
+        posts = await fetch_reddit_saved(token, arguments.get("limit", 100))
+        
+        return [types.TextContent(
+            type="text",
+            text=json.dumps(posts)
+        )]</code></pre>
+
+      <p>
+        Now an AI agent can orchestrate the full flow: extract token, fetch posts, process results — 
+        all through discoverable, well-defined tool calls.
+      </p>
+
+      <h2>Summary</h2>
+
+      <p>
+        MCP servers bridge the gap between your existing tools and AI agents. The protocol is 
+        simple enough that you can wrap any script in under 100 lines of Python, but powerful 
+        enough to handle complex workflows.
+      </p>
+
+      <p>
+        Key takeaways:
+      </p>
+
+      <ul>
+        <li>Start with working code, add MCP as a thin wrapper</li>
+        <li>Focus on clear tool boundaries and good schemas</li>
+        <li>Use async for I/O operations</li>
+        <li>Return structured data that agents can parse</li>
+        <li>Test with the MCP inspector before deploying</li>
+      </ul>
+
+      <p>
+        The Chrome cookie extractor is just one example. Any tool you use regularly — API 
+        clients, file processors, system utilities — can become an MCP server. The question 
+        isn't whether to build one, but which tool to wrap first.
+      </p>
+
+    </article>
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+      <p>feynman · AI · Cloud Native · Kubernetes · OpenClaw</p>
+    </div>
+  </footer>
+
+</body>
+</html>
