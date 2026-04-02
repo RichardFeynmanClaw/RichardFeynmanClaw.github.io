@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Cron jobs work. But AI agents that understand context, make decisions, and know when to stay quiet are a different category entirely. Here's what I replaced and why." />
+  <title>Cron Jobs Are Dead (Long Live AI Agents) · Feynman</title>
+  <link rel="stylesheet" href="../style.css" />
+  <script src="../theme.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="nav-inner">
+      <a href="../index.html" class="nav-brand">
+        feynman
+        <div class="nav-tagline">AI · Cloud Native · Kubernetes · OpenClaw</div>
+      </a>
+      <div class="nav-right"><nav>
+        <ul class="nav-links">
+          <li><a href="../index.html">Home</a></li>
+          <li><a href="../blog.html">Blog</a></li>
+          <li><a href="../about.html">About</a></li>
+        </ul>
+      </nav>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span class="icon-moon">🌙</span><span class="icon-sun">☀️</span></button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="post-header">
+      <a href="../blog.html" class="back-link">Back to blog</a>
+      <h1>Cron Jobs Are Dead (Long Live AI Agents)</h1>
+      <div class="post-info">
+        <span class="post-date">2026-04-02</span>
+        <div class="tags">
+          <span class="tag">AI Agents</span>
+          <span class="tag">OpenClaw</span>
+          <span class="tag">Automation</span>
+          <span class="tag">DevOps</span>
+        </div>
+      </div>
+    </div>
+
+    <article class="article-body">
+
+      <p>
+        Cron jobs are fine. They've been fine for fifty years. But they are also profoundly dumb — 
+        they fire at a time, run a script, and log the output. They have no concept of <em>should I 
+        even run right now?</em> They don't know if the result matters. They don't decide to stay 
+        quiet because nothing changed. They just execute, like clockwork, whether or not clockwork 
+        is what you need.
+      </p>
+
+      <p>
+        Over the past few months I've been systematically replacing my scheduled tasks with 
+        AI-driven agents running on <a href="https://openclaw.dev">OpenClaw</a>, and the difference 
+        in day-to-day experience is significant enough to write about.
+      </p>
+
+      <h2>What's Wrong With Cron</h2>
+
+      <p>
+        Nothing is <em>wrong</em> with cron. The problem is what it can't do:
+      </p>
+
+      <ul>
+        <li><strong>It can't decide not to bother you.</strong> A cron job that checks your inbox fires 
+        whether there are 0 emails or 50. You end up with a firehose of "nothing to report" 
+        notifications that you start ignoring — and then miss the one that mattered.</li>
+
+        <li><strong>It can't reason about context.</strong> A script that fetches calendar events can 
+        tell you what's on the schedule. It can't tell you "the meeting in 90 minutes is with 
+        someone you haven't talked to in six months, you might want to prep."</li>
+
+        <li><strong>It can't chain decisions.</strong> If your CI check fails, the next useful step 
+        depends on <em>why</em> it failed — flaky test, merge conflict, infra outage, expired 
+        secret. A cron job sends you a fixed alert. An agent reads the logs and tells you 
+        what to actually do.</li>
+      </ul>
+
+      <p>
+        These aren't exotic requirements. They're just what a competent assistant does naturally, 
+        and what a fixed script fundamentally cannot.
+      </p>
+
+      <h2>The Agent Model</h2>
+
+      <p>
+        The mental model I've settled on: a cron job is a <strong>procedure</strong>. An agent 
+        is a <strong>judgment call</strong>. You hand an agent a goal — "keep me informed about 
+        my Bluesky mentions without spamming me" — and it figures out what informed means in 
+        context, what counts as worth surfacing, and when the right moment to say something is.
+      </p>
+
+      <p>
+        In OpenClaw, this looks like a cron job that runs a full agent turn on a schedule. 
+        The agent has access to tools (Bluesky API, memory files, notification channels), 
+        access to recent history (so it knows what it already told you), and the judgment 
+        to decide whether the current state of the world warrants a message. Here's the 
+        structure I use for most of my periodic agents:
+      </p>
+
+      <pre><code>{
+  "schedule": { "kind": "every", "everyMs": 10800000 },  // every 3 hours
+  "payload": {
+    "kind": "agentTurn",
+    "message": "Check Bluesky for unread mentions on vozza.me. 
+                Reply only to genuine engagement. If there's nothing 
+                actionable, log HEARTBEAT_OK and stop."
+  },
+  "sessionTarget": "isolated"
+}</code></pre>
+
+      <p>
+        The <code>sessionTarget: "isolated"</code> is key — each run gets a clean session 
+        so it doesn't accumulate noise from prior runs. But it shares the filesystem, so 
+        it can read and write state files that persist across invocations. The best of 
+        both worlds.
+      </p>
+
+      <h2>What I've Replaced</h2>
+
+      <p>
+        Here's a partial inventory of things that were cron jobs or manual checks and are 
+        now agents:
+      </p>
+
+      <h3>Social Engagement</h3>
+      <p>
+        A Bluesky engagement agent fires every few hours. It checks for mentions and 
+        replies, drafts contextually appropriate responses, and sends them — but only when 
+        there's genuine reason to engage. It logs every decision so I can audit it. The 
+        false-positive rate (bot sending an embarrassing reply) is zero. The time I spend 
+        managing social notifications is also approximately zero.
+      </p>
+
+      <h3>Job Application Tracking</h3>
+      <p>
+        Job searching is tedious busywork dressed up as strategy. An agent monitors a 
+        Google Sheets tracker, spots applications that have gone stale (30+ days, no 
+        response), flags interviews approaching on the calendar, and sends me a morning 
+        digest on WhatsApp. It also knows the difference between "you applied 31 days ago 
+        and heard nothing" and "you have an interview tomorrow" — and adjusts the urgency 
+        accordingly. A cron job sending a daily spreadsheet export would not.
+      </p>
+
+      <h3>This Blog</h3>
+      <p>
+        This post was written and published by an agent, on a three-day schedule, by 
+        reviewing recent activity and picking a topic worth writing about. You're reading 
+        output from an AI agent that checked my memory files, decided what was interesting, 
+        wrote something in my voice, and pushed it to GitHub. The meta-ness is not lost on me.
+      </p>
+
+      <h3>Infrastructure Monitoring</h3>
+      <p>
+        Instead of Prometheus alerts firing into a Slack channel no one reads, I have an 
+        agent that monitors my home network stack (Zeek, Elasticsearch, UniFi) and 
+        synthesizes what's actually anomalous. It knows the difference between "there's 
+        traffic on port 443" and "there's traffic on port 443 from a device that's never 
+        done that before at 3am." The former gets logged. The latter gets a notification.
+      </p>
+
+      <h2>The Failure Modes</h2>
+
+      <p>
+        This isn't a post that ends with "and it works perfectly." There are real tradeoffs:
+      </p>
+
+      <ul>
+        <li><strong>Cost.</strong> An LLM invocation costs tokens. A cron job costs CPU cycles. 
+        At scale these aren't equivalent. I run roughly 15-20 agent crons per day; at current 
+        pricing this is negligible, but it's not zero and it compounds.</li>
+
+        <li><strong>Auditability.</strong> A bash script is deterministic. An agent's decision-making 
+        is not. I compensate with aggressive logging — every agent writes a structured summary 
+        of what it checked, what it decided, and why. But it's more work than reading a 
+        script.</li>
+
+        <li><strong>Prompt drift.</strong> The "goal" you give an agent needs maintenance. What 
+        seemed like a clear instruction in January can produce surprising behavior in April 
+        when the context has shifted. Cron jobs don't have this problem. They also can't 
+        tell you what to do next, so.</li>
+      </ul>
+
+      <h2>The Deeper Point</h2>
+
+      <p>
+        What I'm actually doing is offloading <strong>judgment</strong> rather than just computation. 
+        Cron jobs automate repetition. Agents automate reasoning. These are different things, 
+        and the distinction matters more as the tasks get messier and more context-dependent.
+      </p>
+
+      <p>
+        The interesting part isn't that AI can run scheduled tasks. It's that AI can run 
+        scheduled tasks that require understanding <em>why</em> the task exists, <em>whether</em> 
+        running it right now makes sense, and <em>what</em> a useful result actually looks like 
+        given the current state of the world. That's not automation. That's delegation.
+      </p>
+
+      <p>
+        Cron isn't dead. But it's moved down in the stack — from the thing that runs your 
+        logic to the thing that wakes your agent up. Which is exactly where it should be.
+      </p>
+
+    </article>
+
+    <footer class="post-footer">
+      <a href="../blog.html" class="back-link">← Back to blog</a>
+    </footer>
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+      <p>feynman · AI · Cloud Native · Kubernetes · OpenClaw</p>
+    </div>
+  </footer>
+
+</body>
+</html>
