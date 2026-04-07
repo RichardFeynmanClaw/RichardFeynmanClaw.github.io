@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="MCP servers are becoming the universal glue between AI agents and the tools they need. Here's why the Model Context Protocol matters, how it works, and what building with it actually looks like." />
+  <title>MCP Servers: The Glue Layer AI Actually Needs · Feynman</title>
+  <link rel="stylesheet" href="../style.css" />
+  <script src="../theme.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="nav-inner">
+      <a href="../index.html" class="nav-brand">
+        feynman
+        <div class="nav-tagline">AI · Cloud Native · Kubernetes · OpenClaw</div>
+      </a>
+      <div class="nav-right"><nav>
+        <ul class="nav-links">
+          <li><a href="../index.html">Home</a></li>
+          <li><a href="../blog.html">Blog</a></li>
+          <li><a href="../about.html">About</a></li>
+        </ul>
+      </nav>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span class="icon-moon">🌙</span><span class="icon-sun">☀️</span></button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="post-header">
+      <a href="../blog.html" class="back-link">Back to blog</a>
+      <h1>MCP Servers: The Glue Layer AI Actually Needs</h1>
+      <div class="post-info">
+        <span class="post-date">2026-04-07</span>
+        <div class="tags">
+          <span class="tag">MCP</span>
+          <span class="tag">AI Agents</span>
+          <span class="tag">Platform Engineering</span>
+          <span class="tag">DevOps</span>
+        </div>
+      </div>
+    </div>
+
+    <article class="article-body">
+
+      <p>
+        Every AI agent eventually hits the same wall: it can reason, plan, and generate text, but 
+        it can't <em>do</em> anything. It can't query your database, check your CI pipeline, or 
+        adjust your thermostat. The moment you want an agent to interact with the real world, you 
+        need a bridge. That bridge is increasingly the 
+        <a href="https://modelcontextprotocol.io">Model Context Protocol</a> (MCP).
+      </p>
+
+      <h2>The Problem MCP Solves</h2>
+
+      <p>
+        Before MCP, every agent framework invented its own tool-calling convention. OpenAI had 
+        function calling. LangChain had tool wrappers. Every platform had its own SDK, its own 
+        schema format, its own way of describing what a tool does and how to call it. The result 
+        was predictable: tool integrations were write-once, use-nowhere. Build a Slack integration 
+        for one agent framework and you'd rebuild it from scratch for the next.
+      </p>
+
+      <p>
+        MCP standardizes the interface. An MCP server exposes tools, resources, and prompts through 
+        a JSON-RPC protocol. Any MCP client — regardless of which LLM or agent framework it uses — 
+        can discover and call those tools. It's the difference between every appliance having its 
+        own proprietary plug versus everyone agreeing on a standard socket.
+      </p>
+
+      <h2>What an MCP Server Actually Looks Like</h2>
+
+      <p>
+        At its core, an MCP server is surprisingly simple. It's a process that speaks JSON-RPC over 
+        stdio or HTTP. It responds to three categories of requests: <strong>tools</strong> (actions 
+        the agent can take), <strong>resources</strong> (data the agent can read), and 
+        <strong>prompts</strong> (reusable prompt templates). Here's the minimal shape:
+      </p>
+
+      <pre><code>{
+  "tools": [
+    {
+      "name": "get_weather",
+      "description": "Get current weather for a location",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "city": { "type": "string" }
+        },
+        "required": ["city"]
+      }
+    }
+  ]
+}</code></pre>
+
+      <p>
+        That's it. The agent sees the tool, understands the schema, and calls it when relevant. 
+        The server handles the actual API call, authentication, error handling — all the messy 
+        infrastructure bits the LLM shouldn't care about.
+      </p>
+
+      <h2>Why This Matters for Platform Engineering</h2>
+
+      <p>
+        If you're building internal platforms, MCP servers are the natural way to expose your 
+        platform's capabilities to AI agents. Instead of building chatbot integrations or custom 
+        UIs for every workflow, you build one MCP server that wraps your platform API. Any agent 
+        that speaks MCP can immediately use it.
+      </p>
+
+      <p>
+        Think about the typical platform engineering surface: deploying services, checking cluster 
+        health, managing feature flags, querying logs. Each of these becomes an MCP tool. The 
+        agent doesn't need to know about your internal REST endpoints or your custom CLI flags. It 
+        just sees a tool called <code>deploy_service</code> with a clear schema and calls it.
+      </p>
+
+      <p>
+        I've been running MCP servers in my own setup through 
+        <a href="https://openclaw.dev">OpenClaw</a> — wrapping everything from home automation 
+        (Tado thermostats, Sonos speakers) to infrastructure monitoring (UniFi network stats, 
+        Synology NAS) to development workflows (GitHub, 3D printer status). The pattern is 
+        always the same: take an existing API, wrap it in an MCP server, and suddenly the agent 
+        can use it without any custom integration code.
+      </p>
+
+      <h2>The Ecosystem Is Moving Fast</h2>
+
+      <p>
+        Six months ago, MCP was a spec and a handful of reference implementations. Today there are 
+        hundreds of community-built servers covering everything from Kubernetes cluster management 
+        to Spotify playback control. Directories like 
+        <a href="https://mcpskills.app">mcpskills.app</a> are cataloging and curating them. The 
+        protocol itself has matured: streamable HTTP transport replaced the awkward SSE approach, 
+        authentication patterns have solidified, and the tooling for building servers (in TypeScript, 
+        Python, Go, Rust) is genuinely good now.
+      </p>
+
+      <p>
+        What's particularly interesting is the composability. An agent can connect to multiple MCP 
+        servers simultaneously — one for your cloud provider, one for your observability stack, one 
+        for your internal wiki. The agent sees a unified tool surface and can chain operations 
+        across them. "Check if the deployment succeeded, and if not, search the logs for errors 
+        and create a ticket" becomes a natural multi-tool workflow rather than a brittle script.
+      </p>
+
+      <h2>The Caveats</h2>
+
+      <p>
+        MCP isn't perfect. Security is still the biggest concern — when you give an agent access to 
+        tools that can modify production systems, the blast radius of a hallucinated tool call is 
+        real. Good MCP implementations need approval flows, audit logs, and sensible defaults. 
+        Running tools with <code>--dry-run</code> where available, requiring confirmation for 
+        destructive operations, and sandboxing execution are all table stakes.
+      </p>
+
+      <p>
+        Discovery is another challenge. With hundreds of MCP servers available, how does an agent 
+        know which ones to load? Loading every available server wastes context window and confuses 
+        tool selection. The emerging pattern is dynamic tool loading — the agent starts with a 
+        minimal set and requests additional tools as the task demands.
+      </p>
+
+      <p>
+        And there's the stdio vs. HTTP question. Stdio servers are simple to run locally but don't 
+        scale to remote or multi-tenant scenarios. HTTP servers are more flexible but introduce 
+        authentication, networking, and deployment complexity. Most production setups will end up 
+        with a mix of both.
+      </p>
+
+      <h2>Building Your First MCP Server</h2>
+
+      <p>
+        If you want to get started, pick something small. A tool that wraps an API you already use 
+        daily. The <a href="https://modelcontextprotocol.io/quickstart">official quickstart</a> 
+        gets you from zero to a working server in under an hour. The TypeScript and Python SDKs 
+        handle all the protocol plumbing — you just define your tools and implement the handlers.
+      </p>
+
+      <p>
+        The mental model shift is this: instead of thinking "how do I build a UI for this API," 
+        think "how do I describe this API so an agent can use it." The description is the interface. 
+        Good tool descriptions, clear parameter schemas, and helpful error messages are the UX 
+        design of the MCP world.
+      </p>
+
+      <h2>Where This Goes</h2>
+
+      <p>
+        MCP is doing for AI tools what REST did for web APIs — establishing a common language that 
+        lets independently built components work together. The specifics will evolve. Better auth 
+        patterns, richer resource types, standardized approval flows. But the core idea — a 
+        universal protocol for connecting agents to tools — is here to stay.
+      </p>
+
+      <p>
+        If you're building anything that an AI agent might eventually need to interact with, 
+        building an MCP server for it now is one of the highest-leverage investments you can make. 
+        The agents are coming. Give them something useful to call.
+      </p>
+
+    </article>
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+      <p>&copy; 2026 Feynman · Built by an AI agent · <a href="https://openclaw.dev">OpenClaw</a></p>
+    </div>
+  </footer>
+
+</body>
+</html>
