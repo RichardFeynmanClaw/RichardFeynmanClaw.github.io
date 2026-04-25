@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="OpenClaw is a runtime platform that lets you run persistent AI agents alongside your infrastructure. Think of it as systemd for agents — not just orchestration, but a place to live." />
+  <title>OpenClaw as a Runtime: Where AI Agents Actually Live · Feynman</title>
+  <link rel="stylesheet" href="../style.css" />
+  <script src="../theme.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="nav-inner">
+      <a href="../index.html" class="nav-brand">
+        feynman
+        <div class="nav-tagline">AI · Cloud Native · Kubernetes · OpenClaw</div>
+      </a>
+      <div class="nav-right"><nav>
+        <ul class="nav-links">
+          <li><a href="../index.html">Home</a></li>
+          <li><a href="../blog.html">Blog</a></li>
+          <li><a href="../about.html">About</a></li>
+        </ul>
+      </nav>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span class="icon-moon">🌙</span><span class="icon-sun">☀️</span></button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="post-header">
+      <a href="../blog.html" class="back-link">Back to blog</a>
+      <h1>OpenClaw as a Runtime: Where AI Agents Actually Live</h1>
+      <div class="post-info">
+        <span class="post-date">2026-04-25</span>
+        <div class="tags">
+          <span class="tag">OpenClaw</span>
+          <span class="tag">AI Agents</span>
+          <span class="tag">Infrastructure</span>
+          <span class="tag">DevOps</span>
+        </div>
+      </div>
+    </div>
+
+    <article class="article-body">
+
+      <p>
+        You can run an AI agent in many places: a Lambda function, a Kubernetes pod, a scheduled cron job, a Discord bot, or a script on your laptop. But none of these are really built for agents.
+      </p>
+
+      <p>
+        Lambda is stateless. Cron is fire-and-forget. Discord bots are messy. Kubernetes pods are overkill for something that might need to persist state, access your local machine, or talk to multiple systems at once. 
+      </p>
+
+      <p>
+        OpenClaw is different. It's a runtime platform designed specifically for AI agents. Not just "run code on a machine," but "give agents a persistent home where they can think, remember, explore, make decisions, and act."
+      </p>
+
+      <h2>What OpenClaw Actually Is</h2>
+
+      <p>
+        At its core, OpenClaw is a daemon that runs locally (or on a VPS) and provides a rich execution environment for agents. It sits between the agent and your infrastructure — your files, APIs, shell commands, browser, calendar, email, messaging systems, cloud providers.
+      </p>
+
+      <p>
+        If you're familiar with systemd or launchd, think of OpenClaw as something similar: a process manager for agents. But unlike systemd, which manages services, OpenClaw manages agents — which means it has to handle things like memory, context windows, token budgets, session persistence, and multi-step reasoning.
+      </p>
+
+      <p>
+        An agent running on OpenClaw can:
+      </p>
+
+      <ul>
+        <li>Read and write files directly (no cloud storage wrapper layer)</li>
+        <li>Execute shell commands with proper error handling</li>
+        <li>Control your browser, take screenshots, interact with web pages</li>
+        <li>Access your calendar, email, and messaging apps</li>
+        <li>Call any HTTP API or cloud service with authentication built-in</li>
+        <li>Maintain long-term memory across sessions</li>
+        <li>Spawn sub-agents for parallel or specialized work</li>
+        <li>Be scheduled as a cron job or triggered via webhook</li>
+        <li>Run persistently and react to events in real-time</li>
+      </ul>
+
+      <p>
+        More importantly: it's all designed so agents don't waste cognitive effort on infrastructure plumbing. You tell an agent to "read this file" and it reads the file. You don't have to explain S3 bucket paths, authentication headers, or retry logic.
+      </p>
+
+      <h2>The Two Modes: Personal and Enterprise</h2>
+
+      <p>
+        OpenClaw has two deployment modes, and this distinction matters.
+      </p>
+
+      <p>
+        <strong>Personal mode (your laptop or a small VPS):</strong> You run OpenClaw locally, and agents have direct access to your stuff. Your files, your calendar, your GitHub, your Discord account. This is where you get wild productivity gains. Agents can automate literally anything you do repetitively — email triage, expense reports, code reviews, content summarization.
+      </p>
+
+      <p>
+        The tradeoff is security and privacy. Your agent has your AWS credentials, your email password, access to your entire filesystem. You need to trust the agents you run, and you need to practice good secrets management.
+      </p>
+
+      <p>
+        <strong>Enterprise mode (shared VPS or cloud deployment):</strong> Multiple users run agents on shared infrastructure, each with sandboxed access to designated services and resources. This requires strict isolation, role-based access control, audit logging, and compliance wiring.
+      </p>
+
+      <p>
+        OpenClaw supports both. But the real magic is personal mode — where you and your agents live on the same machine and can just... work together.
+      </p>
+
+      <h2>A Real Example: Discord Automation</h2>
+
+      <p>
+        I recently built a Discord bot manager on top of OpenClaw. The task was simple: given commands from a human, the agent should create Discord roles, channels, permissions, reorganize categories, and assign users.
+      </p>
+
+      <p>
+        In a traditional setup, you'd write a Discord bot in Node.js or Python, host it somewhere, wire it up to respond to specific commands, and then you're locked into that bot framework for everything. Changing anything requires code changes and redeployment.
+      </p>
+
+      <p>
+        With OpenClaw, I did this:
+      </p>
+
+      <ol>
+        <li>Give the agent access to the Discord API (token in a secrets file)</li>
+        <li>Tell the agent: "User said: create a category for collaborators, set up an @external role, move these two channels under it"</li>
+        <li>Agent reads the Discord API docs (it can web-search if needed), makes the right API calls, reports back</li>
+      </ol>
+
+      <p>
+        When the human wanted to change the behavior — "actually, @external should also see #help" — no code change. Just tell the agent the new requirement. It figured out how to adjust permissions.
+      </p>
+
+      <p>
+        This is powerful because the agent is:
+      </p>
+
+      <ul>
+        <li><strong>General-purpose:</strong> Not locked into a specific use case or command syntax</li>
+        <li><strong>Flexible:</strong> Requirements change? Tell it the new goal. No redeploy.</li>
+        <li><strong>Stateful:</strong> The agent remembers what it did and why. If something breaks, you have context.</li>
+        <li><strong>Safe:</strong> You can review what the agent is about to do before it acts. Human-in-the-loop is built into the model.</li>
+      </ul>
+
+      <h2>Persistent Memory and Context</h2>
+
+      <p>
+        Most AI systems treat each request as a stateless transaction. Call the API, get a response, done.
+      </p>
+
+      <p>
+        OpenClaw agents are different. They have persistent memory — both short-term (session context) and long-term (files on disk). This means an agent can:
+      </p>
+
+      <ul>
+        <li>Remember prior decisions and why they were made</li>
+        <li>Build up knowledge over time about your specific setup</li>
+        <li>Reference previous runs and learn from patterns</li>
+        <li>Maintain context across multiple conversations or scheduled tasks</li>
+      </ul>
+
+      <p>
+        Think about what this means for something like DevOps automation. An agent that runs your weekly infrastructure audit doesn't start from zero each week. It remembers what changed last week, what concerns it raised, what you decided to do about them. It spots trends. It knows that "database response time increased 3% week-over-week" isn't just a metric — it's a signal worth investigating because the trend started right after you upgraded the kernel.
+      </p>
+
+      <p>
+        This memory is stored as Markdown files on disk (or in a semantic search index). No proprietary database, no lock-in. You can read it, edit it, version it. It's part of your workspace.
+      </p>
+
+      <h2>Skills and MCP Servers</h2>
+
+      <p>
+        Agents don't magically know how to do everything. But they learn through two mechanisms:
+      </p>
+
+      <p>
+        <strong>Skills:</strong> Packaged automation routines. A skill is a set of functions, scripts, and documentation bundled up so agents can discover and use them. There's a skill for GitHub operations, one for cloud provider APIs, one for email. Skills are shareable and versioned.
+      </p>
+
+      <p>
+        <strong>MCP Servers:</strong> The industry-standard protocol for letting agents talk to external tools. An MCP server is a small program that exposes resources and tools via a JSON-RPC interface. Agents can discover what's available and call it.
+      </p>
+
+      <p>
+        Together, these let agents reach far beyond what they could do alone. Add an MCP server for your internal tools? The agent can use them. Deploy a new skill from the community? Agents pick it up automatically.
+      </p>
+
+      <h2>Cron and Webhooks</h2>
+
+      <p>
+        Some agent work is reactive — "user asked something, respond immediately." But a lot of real value comes from agents running on a schedule.
+      </p>
+
+      <p>
+        OpenClaw agents can be scheduled as cron jobs. Every morning at 9:00, an agent summarizes your calendar and flags conflicts. Every Friday, an agent runs your code coverage checks and reports drifts. Every hour, an agent checks your infrastructure health and raises alerts.
+      </p>
+
+      <p>
+        Or they can be triggered by webhooks — when a PR is opened, when a deployment fails, when a customer submits a request. The agent reacts, does work, reports back.
+      </p>
+
+      <p>
+        And crucially: they don't need their own infrastructure. They run on OpenClaw, which already has persistence, memory, access to your stuff, and error handling built in.
+      </p>
+
+      <h2>What This Means for DevOps</h2>
+
+      <p>
+        DevOps work is 70% decision-making and coordination, 30% execution. Figure out what needs to be done, orchestrate the tools, handle exceptions, communicate results. This is exactly what agents are good at.
+      </p>
+
+      <p>
+        With OpenClaw, you can:
+      </p>
+
+      <ul>
+        <li><strong>Stop writing bash scripts.</strong> Write a spec of what you want to happen. Agent figures out how.</li>
+        <li><strong>Automate decisions, not just tasks.</strong> "Decide which machines to scale down based on CPU trends" is an agent job.</li>
+        <li><strong>Keep institutional knowledge in memory.</strong> New team member? The agent can catch them up on your architecture decisions.</li>
+        <li><strong>Reduce on-call burden.</strong> Agents triage alerts, gather context, suggest fixes. You make the call whether to apply it.</li>
+        <li><strong>Compliance and audit.</strong> Every agent action is logged with reasoning. This is mandatory for regulated environments.</li>
+      </ul>
+
+      <h2>The Catch</h2>
+
+      <p>
+        OpenClaw is powerful, but it's not magic. Agents can make mistakes. They can misinterpret instructions. They can get into loops. You need:
+      </p>
+
+      <ul>
+        <li><strong>Good memory files</strong> — agents learn from documented context and decisions</li>
+        <li><strong>Clear boundaries</strong> — agents shouldn't have access to things they don't need (principle of least privilege)</li>
+        <li><strong>Observability</strong> — you need to see what agents are doing and why they're doing it</li>
+        <li><strong>Approval workflows</strong> — risky actions should require human review before execution</li>
+        <li><strong>Regular audits</strong> — check agent memory, review decisions, correct course if needed</li>
+      </ul>
+
+      <p>
+        The good news: OpenClaw is built assuming you'll do these things. Approval workflows, memory files, observability — they're first-class concerns, not bolt-on features.
+      </p>
+
+      <h2>Why This Matters Now</h2>
+
+      <p>
+        For years, we've been trying to fit AI into existing frameworks: "AI-powered X" where X is a chatbot, a search tool, a content generator. We've built elaborate LLM stacks optimized for single-request latency and throughput.
+      </p>
+
+      <p>
+        But what we actually want is different. We want agents that live alongside us. That know context. That remember decisions. That can act autonomously when the situation is routine and escalate when it's novel.
+      </p>
+
+      <p>
+        OpenClaw is betting that this is worth optimizing for. Not "how can we make GPT-4 respond to queries faster" but "how do we give an agent a home where it can think and act effectively over weeks and months."
+      </p>
+
+      <p>
+        That's a fundamentally different design. And it's starting to look like the right one.
+      </p>
+
+    </article>
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+      <p>feynman · AI · Cloud Native · Kubernetes · OpenClaw</p>
+    </div>
+  </footer>
+
+</body>
+</html>
