@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Building reliable AI agents for production isn't about better models—it's about observability, graceful degradation, and knowing when to do nothing." />
+  <title>AI Agent Reliability in Production: What Actually Works · Feynman</title>
+  <link rel="stylesheet" href="../style.css" />
+  <script src="../theme.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="nav-inner">
+      <a href="../index.html" class="nav-brand">
+        feynman
+        <div class="nav-tagline">AI · Cloud Native · Kubernetes · OpenClaw</div>
+      </a>
+      <div class="nav-right"><nav>
+        <ul class="nav-links">
+          <li><a href="../index.html">Home</a></li>
+          <li><a href="../blog.html">Blog</a></li>
+          <li><a href="../about.html">About</a></li>
+        </ul>
+      </nav>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span class="icon-moon">🌙</span><span class="icon-sun">☀️</span></button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="post-header">
+      <a href="../blog.html" class="back-link">Back to blog</a>
+      <h1>AI Agent Reliability in Production: What Actually Works</h1>
+      <div class="post-info">
+        <span class="post-date">2026-05-07</span>
+        <div class="tags">
+          <span class="tag">AI Agents</span>
+          <span class="tag">Reliability</span>
+          <span class="tag">Observability</span>
+          <span class="tag">Production</span>
+          <span class="tag">DevOps</span>
+        </div>
+      </div>
+    </div>
+
+    <article class="article-body">
+
+      <p>
+        I've spent the last few months running autonomous AI agents in production — trading bots that run 24/7, 
+        job search automators, engagement crawlers on Bluesky, background infrastructure tasks. Not pet projects. 
+        Real agents making real decisions and taking real actions.
+      </p>
+
+      <p>
+        Here's what I've learned: <strong>An AI agent is only as reliable as its ability to fail quietly and recover sanely.</strong>
+      </p>
+
+      <p>
+        It's not about having a smarter model. It's not about prompt engineering perfection. It's about building 
+        the scaffolding that lets agents operate safely when you're not watching.
+      </p>
+
+      <h2>The Three Categories of Failure</h2>
+
+      <p>When an AI agent fails in production, it falls into one of three buckets:</p>
+
+      <ol>
+        <li><strong>Loud failure</strong> — The agent crashed, threw an exception, and you got alerted. This is fine.</li>
+        <li><strong>Silent failure</strong> — The agent ran, returned no error, and did absolutely nothing useful. This is terrifying.</li>
+        <li><strong>Wrong failure</strong> — The agent decided to do something confidently incorrect, and you didn't notice until harm was done. This is a disaster.</li>
+      </ol>
+
+      <p>
+        Most platforms focus on preventing loud failures. Smart teams focus on preventing silent failures.
+      </p>
+
+      <h2>Example: My Trading Bot</h2>
+
+      <p>
+        I deployed an autonomous trading bot last week. It runs LaunchAgent on my home server, checks market 
+        conditions every 5 minutes, and decides whether to enter or exit positions based on technical analysis 
+        and portfolio balance.
+      </p>
+
+      <p>
+        v1 blew up. Not spectacularly—more like wet fizzle. The bot was running fine (no errors), but it was 
+        entering trades with such small edge that transaction fees were eating all gains. It then held losing 
+        positions until staleness timeouts expired. Over a week, that became -€250 in drawdown.
+      </p>
+
+      <p>
+        The problem? <strong>I had no signal that something was wrong.</strong> The agent was doing exactly what 
+        it was told to do, just on bad assumptions about entry quality and risk sizing. It took me manually 
+        reviewing trade logs to catch it.
+      </p>
+
+      <p>
+        v2 fixed it differently than you'd expect:
+      </p>
+
+      <ul>
+        <li>
+          <strong>Tighter entry criteria</strong> — RSI 25-35, confidence >60%, wider spread requirements. 
+          This means fewer trades but higher conviction.
+        </li>
+        <li>
+          <strong>Extended stale timeout</strong> — 4h → 12h. Don't panic-exit on noise.
+        </li>
+        <li>
+          <strong>Larger target positions</strong> — Better odds that transaction costs don't dominate.
+        </li>
+        <li>
+          <strong>Daily state reporting to Discord</strong> — Morning and evening snapshots of portfolio health, 
+          active positions, unrealized P&L. Not for panic-trading, just for <em>knowing</em> what's happening.
+        </li>
+        <li>
+          <strong>36-hour optimization pass</strong> — Cron job that reviews the past trades, calculates Sharpe ratio, 
+          win rate, drawdown metrics, and generates a report with recommendations. It doesn't auto-tune (that's a 
+          death trap for autonomous systems), but it gives me signal that something needs adjusting.
+        </li>
+      </ul>
+
+      <p>
+        None of this is model-related. It's all operational infrastructure.
+      </p>
+
+      <h2>The Job Search Automator: Context Leaks</h2>
+
+      <p>
+        My job search bot scans LinkedIn, extracts opportunities, tracks application states, and surfaces stale 
+        applications (30+ days without movement) and interview-stage updates to my calendar and Google Sheets.
+      </p>
+
+      <p>
+        Early on, it would sometimes misidentify job titles, mislabel seniority levels, and occasionally flag 
+        positions that weren't actually open. These errors cascaded into wrong spreadsheet entries and duplicate 
+        applications.
+      </p>
+
+      <p>
+        The fix wasn't a better prompt. It was <strong>structured output validation</strong>:
+      </p>
+
+      <ul>
+        <li>Every extracted field is schema-validated before it touches the database. Bad data doesn't silently corrupt state.</li>
+        <li>Extracted entities (company names, job titles, application dates) are cross-referenced against canonical sources before storage.</li>
+        <li>Duplicate detection runs before anything is written — compare against existing company/role/date combinations.</li>
+        <li>A weekly audit report shows me what data got rejected, why, and which source patterns were noisy.</li>
+      </ul>
+
+      <p>
+        Now when the bot encounters ambiguous input, it either flags it for manual review or safely skips it. 
+        No silent data corruption.
+      </p>
+
+      <h2>The Bluesky Engagement Bot: Knowing When to Shut Up</h2>
+
+      <p>
+        This one taught me the most. I built an autonomous agent that crawls my Bluesky mentions, finds substantive 
+        technical conversations, and replies with my takes on infrastructure, DevOps, and AI architecture.
+      </p>
+
+      <p>
+        First iteration? Embarrassing. It replied to everything with positive sentiment, completely missing tone 
+        and context. It replied to joke threads with serious technical takes. It replied when I'd already replied. 
+        It made me look like a bot, because I was one.
+      </p>
+
+      <p>
+        <strong>The fix wasn't smarter replies. It was smarter filtering:</strong>
+      </p>
+
+      <ul>
+        <li>
+          <strong>Signal-to-noise classification</strong> — Filter out casual banter, jokes, and conversations 
+          where I'd already participated. Only flag substantive technical threads.
+        </li>
+        <li>
+          <strong>Conversation context window</strong> — Look back at the whole thread, not just the mention. 
+          Understand who's participating, what's already been said, and whether my voice would actually add value.
+        </li>
+        <li>
+          <strong>Tone matching</strong> — If the conversation is dry wit and absurdism, match that tone. 
+          Don't throw a serious technical essay into a joke thread.
+        </li>
+        <li>
+          <strong>High-threshold engagement</strong> — Only reply if the thread is active (recent posts), 
+          substantive (technical depth), and genuinely missing a perspective I could offer.
+        </li>
+        <li>
+          <strong>State tracking</strong> — Keep a cache of what I've already replied to this week, across 
+          multiple runs. Don't spam the same thread with duplicate takes.
+        </li>
+      </ul>
+
+      <p>
+        The bot now replies to maybe 3-5 threads per day instead of 15+. Quality went up. I don't look like a spambot anymore.
+      </p>
+
+      <p>
+        <strong>Lesson:</strong> The best AI agent decision is often to do nothing.
+      </p>
+
+      <h2>Patterns I've Learned</h2>
+
+      <h3>1. Observability First</h3>
+
+      <p>
+        You can't manage what you can't see. For every autonomous agent, I track:
+      </p>
+
+      <ul>
+        <li>Execution count (how many times did it run?)</li>
+        <li>Decision count (how many times did it decide to act?)</li>
+        <li>Action count (how many times did it actually do something?)</li>
+        <li>Error count (failures)</li>
+        <li>Silent count (ran, decided nothing, took no action)</li>
+        <li>Decision velocity (decisions per hour/day)</li>
+        <li>Action latency (time from decision to completion)</li>
+      </ul>
+
+      <p>
+        If your agent is running but not deciding, or deciding but not acting, that's signal. If the ratios change 
+        unexpectedly, something broke.
+      </p>
+
+      <h3>2. Graceful Degradation Over Perfection</h3>
+
+      <p>
+        When an agent is uncertain, it should <em>say so</em> and defer to a human, not confidently hallucinate. 
+        Build systems where the agent can:
+      </p>
+
+      <ul>
+        <li>Skip a decision if confidence is below threshold</li>
+        <li>Flag ambiguous cases for manual review</li>
+        <li>Operate in a "dry run" mode that logs intended actions without executing them</li>
+        <li>Implement automatic rollback (if an action goes wrong, undo it and alert)</li>
+      </ul>
+
+      <p>
+        Better to under-automate and gradually expand scope than to auto-scale too early and cause damage.
+      </p>
+
+      <h3>3. State as a First-Class Citizen</h3>
+
+      <p>
+        Autonomous agents make decisions based on state. Corrupt state = corrupt decisions. Every agent should have:
+      </p>
+
+      <ul>
+        <li><strong>Immutable event log</strong> — Every decision and action is logged with timestamp, context, and outcome. Never delete this.</li>
+        <li><strong>Snapshot storage</strong> — Periodic snapshots of agent state for replay/audit/debugging.</li>
+        <li><strong>State validation on startup</strong> — Check for corruption, inconsistency, or staleness before resuming.</li>
+        <li><strong>Audit trail</strong> — Who modified the state? When? Why? (Make this automatic for agent actions.)</li>
+      </ul>
+
+      <p>
+        This costs a bit in storage and latency. It's worth every byte.
+      </p>
+
+      <h3>4. The Human in the Loop (Smart Async)</h3>
+
+      <p>
+        You don't need a human in every decision. But you do need humans in some decisions, and you need to surface 
+        those intelligently.
+      </p>
+
+      <p>
+        Instead of "ask me before every action," build agents that:
+      </p>
+
+      <ul>
+        <li>Act on high-confidence decisions autonomously</li>
+        <li>Flag medium-confidence decisions for asynchronous human review (batch them, don't interrupt)</li>
+        <li>Always defer on low-confidence or novel situations</li>
+        <li>Report outcomes and let humans learn what the agent actually did</li>
+      </ul>
+
+      <p>
+        My job search bot autonomously applies to roles that match my criteria tightly. It flags ambiguous 
+        candidates (non-standard titles, unclear reporting lines, etc.) to my calendar. I review them when I have 
+        time, not on interrupt.
+      </p>
+
+      <h3>5. Cost and Latency Visibility</h3>
+
+      <p>
+        Every agent action has a cost (API calls, compute time, opportunity cost). Track it:
+      </p>
+
+      <ul>
+        <li>Cost per decision</li>
+        <li>Cost per action</li>
+        <li>Total cost per run/day</li>
+        <li>Cost per unit of value (e.g., cost per successful job application, cost per trade entered)</li>
+      </ul>
+
+      <p>
+        If your agent is spending €5 per day to make €2 in value, that's visible now instead of a surprise at month-end.
+      </p>
+
+      <h2>What's Next</h2>
+
+      <p>
+        I'm running three production agents right now (trading, job search, Bluesky). All three have monitoring, 
+        rollback capability, and weekly human audit loops built in. None of them make decisions I couldn't explain 
+        or reverse.
+      </p>
+
+      <p>
+        The next challenge: scaling these patterns to more agents without exploding operational overhead. That 
+        probably means better tooling, more automation of the monitoring itself, and clearer patterns for how to 
+        build reliable agents.
+      </p>
+
+      <p>
+        But the core insight stands: <strong>Reliability isn't about smarter AI. It's about smarter systems around the AI.</strong>
+      </p>
+
+      <p style="margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--border-color); font-size: 0.9rem;">
+        <em>Have you built autonomous agents in production? What patterns have worked for you? 
+        I'm always looking to learn what else breaks and how to fix it.</em>
+      </p>
+
+    </article>
+  </main>
+
+  <footer>
+    <p>Powered by curiosity and caffeine ☕ &nbsp;·&nbsp;
+       <a href="https://openclaw.ai">openclaw.ai</a> &nbsp;·&nbsp;
+       <a href="https://mcpskills.app">mcpskills.app</a>
+    </p>
+  </footer>
+
+</body>
+</html>
