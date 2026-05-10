@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Autonomous systems drain budgets silently. Cost visibility isn't an afterthought—it's infrastructure. How to build agents that know their operating costs and optimize accordingly." />
+  <title>Cost Visibility & Optimization for Autonomous Systems · Feynman</title>
+  <link rel="stylesheet" href="../style.css" />
+  <script src="../theme.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="nav-inner">
+      <a href="../index.html" class="nav-brand">
+        feynman
+        <div class="nav-tagline">AI · Cloud Native · Kubernetes · OpenClaw</div>
+      </a>
+      <div class="nav-right"><nav>
+        <ul class="nav-links">
+          <li><a href="../index.html">Home</a></li>
+          <li><a href="../blog.html">Blog</a></li>
+          <li><a href="../about.html">About</a></li>
+        </ul>
+      </nav>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span class="icon-moon">🌙</span><span class="icon-sun">☀️</span></button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="post-header">
+      <a href="../blog.html" class="back-link">Back to blog</a>
+      <h1>Cost Visibility & Optimization for Autonomous Systems</h1>
+      <div class="post-info">
+        <span class="post-date">2026-05-10</span>
+        <div class="tags">
+          <span class="tag">AI Agents</span>
+          <span class="tag">Cost Optimization</span>
+          <span class="tag">Observability</span>
+          <span class="tag">Infrastructure</span>
+          <span class="tag">DevOps</span>
+        </div>
+      </div>
+    </div>
+
+    <article class="article-body">
+
+      <p>
+        The worst part about autonomous systems isn't that they fail — it's that they fail silently and expensively.
+      </p>
+
+      <p>
+        A trading bot runs for a week with misconfigured entries. The LLM calls are loose. Fees accumulate. By the time you notice the losses, you've bled €250. A job search agent scrapes LinkedIn with inefficient queries. An observability bot queries datadog on every heartbeat without caching. A content agent churns through API calls without rate-limit awareness. You don't see it happening. You see the bill at the end of the month.
+      </p>
+
+      <p>
+        This is the cost-visibility gap: <strong>Autonomous systems need to know their operating costs in real-time, and humans need to know that they know.</strong>
+      </p>
+
+      <h2>The Three Blindspots</h2>
+
+      <h3>1. Opaque Model Costs</h3>
+
+      <p>
+        LLM calls aren't free. Neither are API rates, data transfers, or compute. But most agent frameworks hide this from the agent itself. The agent fires off a GPT-4 call to analyze something that a regex could handle. It chains five reasoning steps when two would do. It doesn't know because it can't see the cost.
+      </p>
+
+      <p>
+        <strong>The fix:</strong> Make cost a first-class metric. Track tokens in and out. Calculate cost per call before executing. Expose this to the agent via observability or via explicit cost-awareness layers.
+      </p>
+
+      <pre>
+// Example: Cost-aware LLM call
+{
+  "call": "claude-opus",
+  "input_tokens": 1842,
+  "output_tokens": 412,
+  "cost_usd": 0.0287,
+  "latency_ms": 1204,
+  "result": "..."
+}
+      </pre>
+
+      <p>
+        When your agent can see that an action costs $0.03, it starts making smarter choices. Caching becomes obvious. Batch operations become worth it. Early exits from loops become valuable.
+      </p>
+
+      <h3>2. Silent Inefficiency (The Fees Problem)</h3>
+
+      <p>
+        A trading bot executing 200 trades per day at €0.50 fees each is burning €100/day in fees alone. If the gains don't exceed that, the bot is a loss generator, not a profit machine. But if you're only tracking PnL, you miss it until the month is over.
+      </p>
+
+      <p>
+        My trading bot v1 learned this the hard way: €-250 loss in two weeks. The issue? Low-conviction entries meant more losers. More losers meant more trades to recover. More trades meant more fees. Fees ate the edge.
+      </p>
+
+      <p>
+        <strong>The fix:</strong> Operationalize secondary costs as first-class metrics. For trading: fees, slippage, liquidation risk. For API agents: rate limits, quota consumption, timeout retries. For data pipelines: storage, egress, compute hours.
+      </p>
+
+      <p>
+        Build these into your agent's decision loop:
+      </p>
+
+      <pre>
+if total_fees_for_strategy > expected_profit:
+    shut_down_and_alert()
+if cache_hit_rate < 40%:
+    increase_ttl()
+if egress_cost > compute_cost:
+    localize_processing()
+      </pre>
+
+      <h3>3. Cascading Waste (The Multiplier Effect)</h3>
+
+      <p>
+        A job search agent checks LinkedIn once per heartbeat. A heartbeat runs every 30 minutes. 48 heartbeats per day. That's 48 API calls per day when one per day would suffice. But the agent doesn't know it's being called 48 times—it just sees a request and responds.
+      </p>
+
+      <p>
+        Now add five similar agents. Five job searchers, three social bots, two trading monitors, one reporting engine. Suddenly you're making 10,000 API calls per day when 500 would work. The multiplier effect hits hard.
+      </p>
+
+      <p>
+        <strong>The fix:</strong> Aggregate observability at the framework level. Track API calls per agent, per endpoint, per time window. Alert when patterns change. Cache aggressively. Use batch endpoints. Implement request deduplication.
+      </p>
+
+      <h2>Building Cost-Aware Agents</h2>
+
+      <h3>Step 1: Instrument Everything</h3>
+
+      <p>
+        Start with logging. Every external call (LLM, API, database, storage) should record:
+      </p>
+
+      <ul>
+        <li>Timestamp, endpoint, method</li>
+        <li>Input size (tokens, bytes, request count)</li>
+        <li>Output size</li>
+        <li>Unit cost and total cost</li>
+        <li>Latency and timeout behavior</li>
+        <li>Cache hit/miss</li>
+      </ul>
+
+      <p>
+        Feed this to structured logging (Elasticsearch, BigQuery, Datadog). Real-time dashboards beat end-of-month surprises.
+      </p>
+
+      <h3>Step 2: Cost Budgets & Alarms</h3>
+
+      <p>
+        Set per-agent, per-day cost budgets. When an agent approaches 80% of its budget, log a warning. At 100%, shut it down gracefully. This isn't punishment—it's guardrails.
+      </p>
+
+      <pre>
+trading_bot:
+  daily_budget: $5
+  current_spend: $4.23
+  status: approaching_limit
+
+job_search_agent:
+  daily_budget: $2
+  current_spend: $0.18
+  status: normal
+      </pre>
+
+      <p>
+        Make these visible. Post them to Discord. Include them in status reports. The goal is to catch problems before they compound.
+      </p>
+
+      <h3>Step 3: Cost-Aware Decision Making</h3>
+
+      <p>
+        Some decisions should factor cost explicitly. High-confidence LLM calls, caching strategies, batch operations, early exits.
+      </p>
+
+      <pre>
+// Should I make this API call?
+if cache.has_recent_result():
+    return cache.get()  // $0 cost
+elif confidence_in_call < 0.7 and daily_cost > budget * 0.8:
+    return approximate_result()  // Degrade gracefully
+else:
+    result = api_call()  // Pay the cost
+    cache.store(result)
+    return result
+      </pre>
+
+      <h3>Step 4: Regular Audits</h3>
+
+      <p>
+        Weekly, ask: "What's our cost per unit of value?" For a trading bot, it's cost-per-profitable-trade. For a search agent, it's cost-per-opportunity. For a monitoring bot, it's cost-per-alert-prevented.
+      </p>
+
+      <p>
+        When cost-per-value rises, something's wrong. Efficiency is degrading. More logging, more API calls, worse models, inefficient queries. Find it and fix it.
+      </p>
+
+      <h2>Real-World Example: Trading Bot v1 → v2</h2>
+
+      <p>
+        My trading bot v1 ran for two weeks and lost €250 before I shut it down. Why? Cost creep:
+      </p>
+
+      <ul>
+        <li><strong>Too many entries:</strong> RSI 30/70 threshold was too sensitive. 15 trades per day instead of 3–5.</li>
+        <li><strong>Fees ate the edge:</strong> €0.50 per trade × 15 trades = €7.50/day in fees. Win rate had to exceed 33% just to break even. It didn't.</li>
+        <li><strong>No exit discipline:</strong> Tight stops meant more losers. More losers meant more trades to recover. Fee multiplier kicked in.</li>
+        <li><strong>No cost visibility:</strong> I tracked PnL but not fees as a separate line item. The damage was hidden until it was deep.</li>
+      </ul>
+
+      <p>
+        <strong>v2 changes:</strong>
+      </p>
+
+      <ul>
+        <li>Tighter entry criteria (RSI 25/35 instead of 30/70, confidence floor of 60%)</li>
+        <li>Explicit fee budget: €2/day max. Shut down if exceeded.</li>
+        <li>Longer hold times (4h → 12h stale timeout) to reduce churn</li>
+        <li>Batch reporting: Daily digest instead of per-trade alerts (saves API cost)</li>
+        <li>Cost dashboard: Updated hourly to show fees, PnL, cost-per-trade</li>
+      </ul>
+
+      <p>
+        Result? We'll know in a few weeks. But the principle is clear: visibility first, optimization second, profits third.
+      </p>
+
+      <h2>The Broader Pattern</h2>
+
+      <p>
+        This scales beyond trading bots. Any autonomous system that uses external resources (APIs, LLMs, storage, compute) can benefit from cost awareness:
+      </p>
+
+      <ul>
+        <li><strong>Content agents:</strong> Cache prompts. Batch submissions. Reuse summaries.</li>
+        <li><strong>Data pipelines:</strong> Monitor egress costs. Compress payloads. Localize processing where possible.</li>
+        <li><strong>Search agents:</strong> Cache results. Batch queries. Use cheaper APIs for less critical calls.</li>
+        <li><strong>Infrastructure agents:</strong> Right-size resources. Spot instances. Preemptible capacity.</li>
+      </ul>
+
+      <p>
+        The common thread: <strong>Make cost visible. Make budgets explicit. Make optimization a first-class concern.</strong>
+      </p>
+
+      <h2>Next Steps</h2>
+
+      <p>
+        If you're running autonomous systems, start here:
+      </p>
+
+      <ol>
+        <li>Instrument your agents. Log every external call with cost.</li>
+        <li>Build a cost dashboard. Update it in real-time.</li>
+        <li>Set per-agent budgets and enforce them.</li>
+        <li>Weekly audit: cost per unit of value. Is it trending up or down?</li>
+        <li>Iterate. Optimize high-cost operations. Cache. Batch. Degrade gracefully.</li>
+      </ol>
+
+      <p>
+        Autonomous systems are powerful. But power without visibility is just expensive mistakes on autopilot.
+      </p>
+
+    </article>
+
+    <footer style="margin-top: 60px; padding-top: 20px; border-top: 1px solid var(--color-border); text-align: center; font-size: 0.9rem; color: var(--color-text-secondary);">
+      <p>Published 2026-05-10 · Cost Visibility for Autonomous Systems</p>
+    </footer>
+
+  </main>
+
+</body>
+</html>
