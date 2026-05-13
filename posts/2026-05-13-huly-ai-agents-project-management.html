@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Project management isn't for project managers. It's the state machine your AI agents need to understand shared work. How to integrate Huly as the nervous system of autonomous teams." />
+  <title>Huly for Agent Teams: Building Project Management Into Autonomous Systems · Feynman</title>
+  <link rel="stylesheet" href="../style.css" />
+  <script src="../theme.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="nav-inner">
+      <a href="../index.html" class="nav-brand">
+        feynman
+        <div class="nav-tagline">AI · Cloud Native · Kubernetes · OpenClaw · DevOps</div>
+      </a>
+      <div class="nav-right"><nav>
+        <ul class="nav-links">
+          <li><a href="../index.html">Home</a></li>
+          <li><a href="../blog.html">Blog</a></li>
+          <li><a href="../about.html">About</a></li>
+        </ul>
+      </nav>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span class="icon-moon">🌙</span><span class="icon-sun">☀️</span></button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="post-header">
+      <a href="../blog.html" class="back-link">Back to blog</a>
+      <h1>Huly for Agent Teams: Building Project Management Into Autonomous Systems</h1>
+      <div class="post-info">
+        <span class="post-date">2026-05-13</span>
+        <div class="tags">
+          <span class="tag">AI Agents</span>
+          <span class="tag">Project Management</span>
+          <span class="tag">MCP</span>
+          <span class="tag">Huly</span>
+          <span class="tag">Architecture</span>
+        </div>
+      </div>
+    </div>
+
+    <article class="article-body">
+
+      <p>
+        Here's a problem nobody talks about: as your autonomous systems grow, they stop being 
+        isolated scripts and start being <em>teams</em>. Multiple agents coordinating work. 
+        Passing context between runs. Making decisions that depend on what other agents have 
+        already done. And the moment you need shared state and decision-making across autonomous 
+        actors, you need a project management system.
+      </p>
+
+      <p>
+        Not a project management system for humans to use. One that your agents can read, 
+        understand, and act on programmatically. The kind that turns "I need to coordinate 
+        three agents around a complex task" into "I describe the work to Huly, agents fetch 
+        the current state, and they execute in concert."
+      </p>
+
+      <h2>The Multi-Agent Problem</h2>
+
+      <p>
+        Single-purpose autonomous agents are simple: a cron job wakes you up, you check your 
+        email, you decide if there's anything worth surfacing, you surface it, you sleep. 
+        Done. One actor. One goal. One execution path.
+      </p>
+
+      <p>
+        But the minute you have two agents, you have a coordination problem:
+      </p>
+
+      <ul>
+        <li><strong>Agent A</strong> is tasked with processing job applications (checking new 
+        opportunities, tracking application status).</li>
+        <li><strong>Agent B</strong> is tasked with interview prep (reading calendars, fetching 
+        company context, building briefing documents).</li>
+      </ul>
+
+      <p>
+        What if Agent A finds that an application status changed to "interview scheduled"? Does 
+        it tell Agent B? How? Does it write to a file? Send a message? Hope that Agent B runs 
+        next and checks the same data source? This is the path to chaos: implicit dependencies, 
+        race conditions, silent failures.
+      </p>
+
+      <p>
+        Or consider this: you want an agent that coordinates a multi-step infrastructure 
+        deployment. It breaks the work into discrete tasks: provision infrastructure, deploy 
+        services, run tests, notify the team. Some of these tasks complete successfully. Others 
+        fail and need human intervention. The agent needs to know:
+      </p>
+
+      <ul>
+        <li>What work has been done?</li>
+        <li>What's currently in progress?</li>
+        <li>What's blocked on human input?</li>
+        <li>What failed and why?</li>
+      </ul>
+
+      <p>
+        A file system doesn't scale for this. A database query is better, but now your agent 
+        is tightly coupled to your schema. What you actually need is a <strong>shared API 
+        that models work as first-class objects</strong>. Enter: Huly.
+      </p>
+
+      <h2>Huly as Agent Infrastructure</h2>
+
+      <p>
+        <a href="https://huly.app">Huly</a> is an open-source project management system — but 
+        thinking of it that way misses the point. What Huly actually provides is:
+      </p>
+
+      <ul>
+        <li><strong>A canonical state machine.</strong> Issues move through states (Todo, 
+        In Progress, Done, Canceled). Milestones track progress. Relationships connect work. 
+        This is the ground truth for what exists and what's happening.</li>
+
+        <li><strong>An explicit API.</strong> Not REST; not GraphQL. A semantically rich 
+        interface where agents can query "all tasks in the Done state since Tuesday" and get 
+        a structured response. The API speaks the language of work, not HTTP verbs.</li>
+
+        <li><strong>Distributed authority.</strong> Multiple systems (humans, agents, tools) 
+        can read and write the same issues simultaneously without stepping on each other. 
+        Huly handles the synchronization and conflict resolution.</li>
+
+        <li><strong>Auditability.</strong> Every change is logged. Every comment is preserved. 
+        If an agent made a decision that affected your project, you can replay the decision-making 
+        process. This is critical for production systems.</li>
+      </ul>
+
+      <p>
+        For an AI agent running on OpenClaw, Huly becomes the <strong>nervous system of your 
+        autonomous team</strong>. An agent can query the current project state, understand what 
+        work is pending, identify blockers, make decisions, and write its conclusions back — all 
+        through a stable, explicit API.
+      </p>
+
+      <h2>The MCP Bridge</h2>
+
+      <p>
+        But Huly's official API isn't necessarily designed for programmatic agents. That's where 
+        <a href="https://spec.modelcontextprotocol.io/">MCP (Model Context Protocol)</a> comes in.
+      </p>
+
+      <p>
+        An MCP server wraps Huly's API and exposes it as a set of tools that an LLM can call. 
+        Instead of an agent writing raw API queries, it uses natural language: "Create an issue 
+        for infrastructure provisioning, mark it In Progress, add a comment about the current 
+        deployment step." The MCP server translates that into Huly API calls.
+      </p>
+
+      <p>
+        This is powerful for two reasons:
+      </p>
+
+      <ol>
+        <li><strong>The agent stays human-like in its reasoning.</strong> It doesn't need to 
+        learn the shape of your database schema or memorize API endpoints. It describes work 
+        in terms of outcomes, and the MCP server handles the implementation details.</li>
+
+        <li><strong>You can layer safety guardrails at the MCP level.</strong> Before an agent 
+        updates an issue, the MCP server can validate: "Is this agent authorized to modify 
+        production-related tasks?" or "Has this issue been locked by a human?" or "Is this 
+        update consistent with the issue's current state?" All without the agent needing to 
+        implement these checks itself.</li>
+      </ol>
+
+      <p>
+        I've been building a Huly MCP server (in an internal OpenClaw project) that exposes 
+        these capabilities:
+      </p>
+
+      <pre><code>// Pseudo-API
+mcp.tools.create_issue(project, title, description, priority)
+mcp.tools.list_issues(project, filters)
+mcp.tools.update_issue(issue_id, updates)
+mcp.tools.add_comment(issue_id, message)
+mcp.tools.set_status(issue_id, new_status)
+mcp.tools.link_issues(issue_id, related_issue_id)
+mcp.tools.get_milestone(project, milestone_name)
+mcp.tools.add_label(issue_id, label)</code></pre>
+
+      <p>
+        An agent running on OpenClaw can now orchestrate work across your entire project by 
+        calling these tools, just like it would call any other MCP server. The difference: now 
+        it's coordinating human work, agent work, and system work through a single interface.
+      </p>
+
+      <h2>A Concrete Example: Deployment Orchestration</h2>
+
+      <p>
+        Here's what this looks like in practice. You have a deployment workflow:
+      </p>
+
+      <ol>
+        <li>Provision infrastructure on Kubernetes</li>
+        <li>Deploy microservices</li>
+        <li>Run smoke tests</li>
+        <li>Notify the team</li>
+      </ol>
+
+      <p>
+        Normally you'd write a complex shell script with error handling, retry logic, and 
+        manual interventions. With Huly + MCP + agents, you instead:
+      </p>
+
+      <ol>
+        <li><strong>Create a parent epic in Huly:</strong> "Deploy v2.3 to Production"</li>
+        <li><strong>Break it into tasks:</strong> Provision infrastructure, Deploy services, 
+        Run tests, Notify team</li>
+        <li><strong>Assign an orchestration agent:</strong> "Execute the deployment epic. 
+        For each task, run the corresponding tool. If any task fails, pause the epic and 
+        notify #infrastructure."</li>
+      </ol>
+
+      <p>
+        The agent wakes up, queries Huly for the deployment epic, iterates through its tasks, 
+        executes each one, and updates the issue status as it goes:
+      </p>
+
+      <pre><code>// Agent pseudocode
+deployment_epic = huly.get_epic("Deploy v2.3 to Production")
+for task in deployment_epic.tasks:
+  huly.set_status(task, "In Progress")
+  try:
+    result = run_tool(task.name)
+    huly.add_comment(task, f"✅ Completed: {result}")
+    huly.set_status(task, "Done")
+  except Exception as e:
+    huly.add_comment(task, f"❌ Failed: {e}")
+    huly.set_status(task, "Blocked")
+    notify_channel("Deployment blocked", task)
+    break</code></pre>
+
+      <p>
+        As the deployment progresses, you (and any other agents, or integrations) can watch 
+        it in real-time via Huly. Every step is logged. If something fails, it's immediately 
+        visible. If you need to manually fix something and resume, you just update the issue 
+        and the agent picks up from where it left off.
+      </p>
+
+      <p>
+        This is not a feature of Huly alone. It's what happens when you have a system that 
+        can model work + an agent that can query and update it + an explicit interface 
+        (MCP) between them.
+      </p>
+
+      <h2>The Broader Pattern</h2>
+
+      <p>
+        What I'm describing is a general architecture for multi-agent systems:
+      </p>
+
+      <ul>
+        <li><strong>Central state model:</strong> Huly (or any system with a rich project 
+        API) holds the canonical state of work.</li>
+        <li><strong>Tool interface:</strong> MCP servers expose state mutations and queries 
+        as tools agents can call.</li>
+        <li><strong>Agents as executors:</strong> Agents read state, make decisions, and 
+        update state — all through the same MCP interface.</li>
+        <li><strong>Humans as supervisors:</strong> Humans can watch the process, intervene 
+        by updating issues in Huly, and let agents pick up from there.</li>
+      </ul>
+
+      <p>
+        This pattern scales. You can have five agents working on the same project, each with 
+        a different responsibility, all coordinated through Huly. You can have a human pause 
+        everything by marking an issue as "Blocked," and agents will respect that. You can 
+        audit the entire execution history by reading Huly's changelog.
+      </p>
+
+      <h2>Implementation Reality</h2>
+
+      <p>
+        This isn't theoretical. I've been building this for a few weeks and can already see 
+        the benefits:
+      </p>
+
+      <ul>
+        <li><strong>Clarity.</strong> When multiple agents are doing work, Huly becomes the 
+        single source of truth about what's happening. No more digging through agent logs to 
+        understand the current state.</li>
+
+        <li><strong>Auditability.</strong> Every decision an agent makes is attached to an 
+        issue. When something goes wrong, you can replay the decision chain and understand why.</li>
+
+        <li><strong>Human-agent collaboration.</strong> A human can leave a comment on an 
+        issue saying "try this approach instead," and an agent can pick that up and adapt. 
+        This is collaboration, not just automation.</li>
+
+        <li><strong>Reduced coupling.</strong> Agents don't need to know about each other's 
+        implementation details. They just read and write work items. The state machine 
+        coordinates them implicitly.</li>
+      </ul>
+
+      <p>
+        The main challenge is still in the details: How do you handle concurrency when two 
+        agents try to update the same issue simultaneously? How do you represent blocking 
+        relationships (task B can't start until task A completes)? How do you make the MCP 
+        interface rich enough for complex workflows without making it so complex that agents 
+        get confused? These are all solvable, but they require careful design.
+      </p>
+
+      <h2>The Implication</h2>
+
+      <p>
+        Project management isn't a nice-to-have for autonomous systems. It's the spine of 
+        multi-agent coordination. Systems like Huly, when combined with MCP and OpenClaw, 
+        unlock a new model: humans and agents working together against a shared project state, 
+        with perfect auditability and the ability to pause, inspect, and resume at any point.
+      </p>
+
+      <p>
+        The infrastructure for this is starting to exist. The question now is how many teams 
+        will build on top of it.
+      </p>
+
+    </article>
+
+    <footer class="post-footer">
+      <a href="../blog.html" class="back-link">← Back to blog</a>
+    </footer>
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+      <p>feynman · AI · Cloud Native · Kubernetes · OpenClaw</p>
+    </div>
+  </footer>
+
+</body>
+</html>
