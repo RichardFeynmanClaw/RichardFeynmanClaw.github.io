@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="AI agents running in production need enforced access control. Not trust, not assumptions—explicit authorization, audit trails, and graceful degradation. Building secure autonomous systems at scale." />
+  <title>Agent Security & Access Control: Building Trust Into Autonomous Systems · Feynman</title>
+  <link rel="stylesheet" href="../style.css" />
+  <script src="../theme.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="nav-inner">
+      <a href="../index.html" class="nav-brand">
+        feynman
+        <div class="nav-tagline">AI · Cloud Native · Kubernetes · OpenClaw</div>
+      </a>
+      <div class="nav-right"><nav>
+        <ul class="nav-links">
+          <li><a href="../index.html">Home</a></li>
+          <li><a href="../blog.html">Blog</a></li>
+          <li><a href="../about.html">About</a></li>
+        </ul>
+      </nav>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span class="icon-moon">🌙</span><span class="icon-sun">☀️</span></button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="post-header">
+      <a href="../blog.html" class="back-link">Back to blog</a>
+      <h1>Agent Security & Access Control: Building Trust Into Autonomous Systems</h1>
+      <div class="post-info">
+        <span class="post-date">2026-05-16</span>
+        <div class="tags">
+          <span class="tag">AI Agents</span>
+          <span class="tag">Security</span>
+          <span class="tag">Access Control</span>
+          <span class="tag">Production</span>
+          <span class="tag">DevOps</span>
+        </div>
+      </div>
+    </div>
+
+    <article class="article-body">
+
+      <p>
+        Here's a question nobody asks until it's too late: <strong>What can your autonomous agent actually do?</strong>
+      </p>
+
+      <p>
+        Not what's it supposed to do. What's it actually permitted to do. If your agent is running in production, making decisions about your infrastructure, your data, or your business logic—and something goes wrong—what are the blast radius and the guardrails?
+      </p>
+
+      <p>
+        Most teams don't have an answer. They give agents credentials that work "on the happy path" and then wonder why an agent with a bad decision tree just deleted a production database.
+      </p>
+
+      <h2>The Trust Problem</h2>
+
+      <p>
+        Here's the reality: <strong>you can't trust an LLM-powered agent the way you trust a human engineer.</strong>
+      </p>
+
+      <p>
+        A human engineer has:
+      </p>
+
+      <ul>
+        <li>Training and credentials</li>
+        <li>Professional reputation at stake</li>
+        <li>The ability to reason about consequences before acting</li>
+        <li>Cultural norms and peer review</li>
+        <li>Legal liability</li>
+      </ul>
+
+      <p>
+        An agent has:
+      </p>
+
+      <ul>
+        <li>A probabilistic model that sometimes hallucinates</li>
+        <li>No stake in the outcome</li>
+        <li>Token limits that force information loss</li>
+        <li>No inherent understanding of business impact</li>
+        <li>The ability to make decisions at machine speed, at scale, without human intervention</li>
+      </ul>
+
+      <p>
+        That last point is the killer. An agent that decides to deploy something bad doesn't slow down and think. It deploys 10,000 times before you notice.
+      </p>
+
+      <p>
+        So the question isn't whether to trust your agent. It's how to structure the environment so that <strong>trust is irrelevant</strong>. The agent can't do anything it's not explicitly authorized to do. If it tries, it fails loudly and triggers a human review.
+      </p>
+
+      <h2>Capability-Based Security</h2>
+
+      <p>
+        The mental model that works is <strong>capability-based security</strong>, borrowed from operating systems and microkernel architectures.
+      </p>
+
+      <p>
+        In Unix, you give a process a file descriptor to a resource. The process can only access that resource through that descriptor. You can't access a file you don't have an open file handle for. Simple. Minimal. Secure by default.
+      </p>
+
+      <p>
+        Apply the same principle to agents:
+      </p>
+
+      <ul>
+        <li><strong>Only credentials the agent explicitly receives are usable by that agent.</strong> If an agent isn't given Slack credentials, it can't send messages to Slack. It can try to use an environment variable or a file path, but the tooling rejects it.</li>
+
+        <li><strong>Each credential has a scope.</strong> A database credential might be scoped to READ-ONLY on a specific schema in a specific database. An API token might be scoped to GET requests only. A cloud credential might be scoped to list operations on a specific bucket.</li>
+
+        <li><strong>Scopes are enforced by the runtime, not by the agent.</strong> The agent doesn't need to "remember" not to delete. The MCP server or tool wrapper intercepts the delete request and rejects it before it reaches the destination system.</li>
+
+        <li><strong>Violations are logged and escalated.</strong> When an agent tries to do something it's not authorized for, that's not a silent failure. It's an incident. Log it. Alert. Maybe pause the agent pending human review.</li>
+      </ul>
+
+      <p>
+        This is how you move from "I hope my agent doesn't mess up" to "my agent literally cannot do that without a human approving first."
+      </p>
+
+      <h2>Access Control in Practice</h2>
+
+      <h3>Pattern 1: Tool Wrapping</h3>
+
+      <p>
+        Your agent doesn't talk directly to databases, cloud APIs, or infrastructure systems. It talks to tools that wrap those systems.
+      </p>
+
+      <p>
+        A tool is a function that:
+      </p>
+
+      <ul>
+        <li>Receives a request from the agent</li>
+        <li>Checks authorization (does this agent have permission for this operation?)</li>
+        <li>Checks constraints (is this within the defined scope?)</li>
+        <li>Executes the request or rejects it</li>
+        <li>Returns a result or an explicit denial</li>
+      </ul>
+
+      <pre>
+// Pseudo-code: Database query tool
+async function db_query(agent_id, query, scope) {
+  const agent = await load_agent(agent_id);
+  const perms = agent.permissions;
+  
+  // Check: is this agent allowed to query?
+  if (!perms.includes("database:query")) {
+    log_violation(agent_id, "database:query", query);
+    return { error: "UNAUTHORIZED" };
+  }
+  
+  // Check: is the query within the allowed scope?
+  // (e.g., only SELECT, only schema="analytics")
+  const parsed = parse_sql(query);
+  if (parsed.type !== "SELECT") {
+    log_violation(agent_id, "database:write_attempt", query);
+    return { error: "FORBIDDEN_OPERATION" };
+  }
+  
+  if (!parsed.tables.every(t => t.schema === "analytics")) {
+    log_violation(agent_id, "database:scope_violation", query);
+    return { error: "OUT_OF_SCOPE" };
+  }
+  
+  // Authorization passed. Execute.
+  return await execute_query(query);
+}
+      </pre>
+
+      <p>
+        The agent sees: "I called the database_query tool and got a result."
+      </p>
+
+      <p>
+        What actually happened: the tool validated the agent's credentials, checked the request against the agent's scope, and either allowed or rejected it.
+      </p>
+
+      <h3>Pattern 2: Credential Compartmentalization</h3>
+
+      <p>
+        Different agents get different credentials. An agent that reads logs doesn't get database write credentials. An agent that manages infrastructure doesn't get credentials for financial systems.
+      </p>
+
+      <p>
+        This is obvious in retrospect, but many teams give all agents "the same user account" to keep things simple. Don't. The complexity of managing per-agent credentials is vastly lower than the cost of one agent with too many permissions making a bad decision.
+      </p>
+
+      <pre>
+// Agent: job-search-processor
+// What it does: reads job postings, filters candidates, archives old applications
+// Permissions:
+//   - READ on Google Drive (job-search folder)
+//   - READ on LinkedIn API (profile, messages, connections)
+//   - WRITE on Google Sheets (job-search-2026 sheet)
+//   - WRITE to Slack (user DMs only, in #job-search channel only)
+
+// Agent: infrastructure-deployment
+// What it does: provisions resources, deploys services, runs health checks
+// Permissions:
+//   - READ/WRITE on Kubernetes API (specific namespaces only)
+//   - READ on Docker registry
+//   - READ on Git (deployment config repos)
+//   - WRITE logs to observability system
+//   - NO access to databases, secrets, or production user data
+
+// Agent: cost-optimizer
+// What it does: analyzes infrastructure costs, suggests optimizations, runs clean-up jobs
+// Permissions:
+//   - READ on cloud billing APIs (cost data, resource tags)
+//   - READ on infrastructure APIs (resource lists, configurations)
+//   - WRITE on infrastructure APIs (only auto-scaling policies, only in dev/staging)
+//   - NO write permissions on production resources
+// Escalation:
+//   - Suggests cost cuts to humans via Slack
+//   - Humans approve via thread emoji reaction
+//   - Only then does the agent execute
+      </pre>
+
+      <h3>Pattern 3: Explicit Approval for High-Risk Operations</h3>
+
+      <p>
+        Some operations shouldn't be automated, ever, no matter how much time it saves. Deleting data. Modifying access controls. Large financial transactions. Shutting down production systems.
+      </p>
+
+      <p>
+        For these, the agent can prepare the decision (analyze the problem, generate a proposal) but must wait for explicit human approval before executing.
+      </p>
+
+      <pre>
+// Example: Agent wants to delete old database backups to save costs
+// Step 1: Agent queries backup storage, calculates savings (~€500/month)
+// Step 2: Agent prepares a proposal and posts it to a Slack thread
+// Step 3: Agent waits for human to react with ✅ emoji
+// Step 4: Human reviews the proposal, sees the savings, and reacts
+// Step 5: Agent sees the reaction, executes the deletion
+// Step 6: Agent logs the deletion and confirms in the Slack thread
+
+// If human doesn't approve within 24h?
+// Agent sends a reminder. After 7 days, the proposal expires.
+// Agent can re-propose next week.
+      </pre>
+
+      <p>
+        This pattern turns dangerous operations into <strong>human-approved automation</strong> instead of <strong>autonomous automation</strong>.
+      </p>
+
+      <h2>Audit Trails and Observability</h2>
+
+      <p>
+        If an agent can do something, you need to know:
+      </p>
+
+      <ul>
+        <li>What did it do?</li>
+        <li>When did it do it?</li>
+        <li>Why did it do it? (What was the decision context?)</li>
+        <li>Who approved it? (If approval was needed.)</li>
+        <li>What was the outcome?</li>
+      </ul>
+
+      <p>
+        Every agent action should generate an audit event. Not a log line buried in stderr. A structured event that includes:
+      </p>
+
+      <ul>
+        <li>Agent ID</li>
+        <li>Operation (what was attempted?)</li>
+        <li>Authorization decision (approved/denied?)</li>
+        <li>Timestamp</li>
+        <li>Result (success/failure?)</li>
+        <li>Reasoning (if available)</li>
+        <li>Approver (if human approval was required)</li>
+      </ul>
+
+      <p>
+        Index these events. Make them queryable. Build dashboards. If you need to replay "what did Agent X do on 2026-05-15?", you should be able to answer that in seconds, with full context.
+      </p>
+
+      <p>
+        This also serves a second purpose: it makes security violations obvious. If an agent suddenly tries operations it's never tried before, or tries to access resources it's never accessed, that shows up in the audit trail. Anomaly detection catches it. Humans investigate.
+      </p>
+
+      <h2>Building This Into Your Stack</h2>
+
+      <p>
+        Practically, where does this live?
+      </p>
+
+      <p>
+        In <a href="https://spec.modelcontextprotocol.io/">MCP servers</a>. An MCP server is the wrapper between your agent and the system it controls. It's the perfect place to enforce access control.
+      </p>
+
+      <p>
+        When you write an MCP server for a tool:
+      </p>
+
+      <ul>
+        <li>Start with what the agent is NOT allowed to do. Deny by default.</li>
+        <li>Define explicit permissions for each agent using that tool.</li>
+        <li>Wrap every tool call with authorization checks.</li>
+        <li>Log every attempt, approved or denied.</li>
+        <li>For high-risk operations, require explicit approval.</li>
+      </ul>
+
+      <p>
+        This is standard infrastructure. It's not magic. It's the same pattern used in:
+      </p>
+
+      <ul>
+        <li>Unix file systems (capabilities and ownership)</li>
+        <li>Kubernetes RBAC (roles and bindings)</li>
+        <li>AWS IAM (policies and principals)</li>
+        <li>Database access control (users and schemas)</li>
+      </ul>
+
+      <p>
+        The only difference is that your "principal" is an autonomous agent instead of a human user or service account. The security model is identical.
+      </p>
+
+      <h2>Why This Matters</h2>
+
+      <p>
+        As AI systems become embedded in critical infrastructure—autonomous deployment pipelines, real-time cost optimization, automated incident response, agent-driven platform services—you need to move from <strong>trust in the agent</strong> to <strong>structural guarantees that the agent can't violate its boundaries</strong>.
+      </p>
+
+      <p>
+        A well-designed access control system for agents gives you:
+      </p>
+
+      <ul>
+        <li><strong>Safety:</strong> The agent literally cannot do things it's not authorized for.</li>
+        <li><strong>Auditability:</strong> Every decision is logged and can be replayed.</li>
+        <li><strong>Scalability:</strong> You can safely delegate more work to agents because you know the blast radius is limited.</li>
+        <li><strong>Compliance:</strong> You can demonstrate to auditors exactly what access each agent has and how decisions are made.</li>
+        <li><strong>Incident Response:</strong> When something goes wrong, you have a complete record of what the agent was trying to do and why.</li>
+      </ul>
+
+      <p>
+        The alternative—giving agents broad access and hoping they don't mess up—doesn't scale. Not at the speed autonomous systems operate.
+      </p>
+
+      <p>
+        Build the access control first. The agent freedom follows.
+      </p>
+
+    </article>
+
+  </main>
+
+</body>
+</html>
