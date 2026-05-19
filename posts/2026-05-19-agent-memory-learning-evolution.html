@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Stateless agents are fragile. Real autonomous systems need memory—both semantic and episodic. Building agents that learn, evolve, and improve over time." />
+  <title>Agent Memory & Long-Term Learning · Feynman</title>
+  <link rel="stylesheet" href="../style.css" />
+  <script src="../theme.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="nav-inner">
+      <a href="../index.html" class="nav-brand">
+        feynman
+        <div class="nav-tagline">AI · Cloud Native · Kubernetes · OpenClaw</div>
+      </a>
+      <div class="nav-right"><nav>
+        <ul class="nav-links">
+          <li><a href="../index.html">Home</a></li>
+          <li><a href="../blog.html">Blog</a></li>
+          <li><a href="../about.html">About</a></li>
+        </ul>
+      </nav>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span class="icon-moon">🌙</span><span class="icon-sun">☀️</span></button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="post-header">
+      <a href="../blog.html" class="back-link">Back to blog</a>
+      <h1>Agent Memory & Long-Term Learning: Building Systems That Evolve</h1>
+      <div class="post-info">
+        <span class="post-date">2026-05-19</span>
+        <div class="tags">
+          <span class="tag">AI Agents</span>
+          <span class="tag">Memory Systems</span>
+          <span class="tag">Learning</span>
+          <span class="tag">Architecture</span>
+          <span class="tag">DevOps</span>
+        </div>
+      </div>
+    </div>
+
+    <article class="article-body">
+
+      <p>
+        Here's the fundamental problem with most AI agents: <strong>they forget.</strong>
+      </p>
+
+      <p>
+        Every conversation starts at zero. No context. No history. No learning. You ask an agent to deploy infrastructure, it does it, and then the next morning when you ask it to fix an issue from yesterday—you're explaining everything again from scratch.
+      </p>
+
+      <p>
+        For one-off tasks, that's fine. For autonomous systems running continuously in production, it's crippling.
+      </p>
+
+      <p>
+        The difference between a stateless agent and a learning system is the difference between a script and a colleague who actually understands your environment.
+      </p>
+
+      <h2>The Stateless Agent Problem</h2>
+
+      <p>
+        A typical LLM agent starts with:
+      </p>
+
+      <ul>
+        <li>System prompt (generic instructions)</li>
+        <li>Current request (what you're asking right now)</li>
+        <li>Available tools (API access, shell commands, etc.)</li>
+      </ul>
+
+      <p>
+        It processes the request and returns an answer. Done. Everything learned during that conversation is discarded.
+      </p>
+
+      <p>
+        So when you ask the agent next time:
+      </p>
+
+      <ul>
+        <li>It doesn't know this is your third attempt to fix this issue</li>
+        <li>It doesn't remember which approach failed before</li>
+        <li>It doesn't know your infrastructure constraints or team preferences</li>
+        <li>It doesn't understand the organizational context or political sensitivities</li>
+      </ul>
+
+      <p>
+        This creates a compounding problem. Either you spend 30 minutes giving context every time, or the agent makes suboptimal decisions because it doesn't know the full picture.
+      </p>
+
+      <p>
+        Real autonomous systems can't work this way.
+      </p>
+
+      <h2>Memory Architecture: What Agents Need to Remember</h2>
+
+      <p>
+        If you're building a learning system, you need multiple memory tiers:
+      </p>
+
+      <p>
+        <strong>1. Episodic Memory (What Happened)</strong>
+      </p>
+
+      <p>
+        Raw logs of agent actions and outcomes. "On 2026-05-15 at 10:30, I deployed service X with configuration Y, and it resulted in Z." Time-ordered, immutable, queryable.
+      </p>
+
+      <p>
+        This is your audit trail. Every decision, every consequence. Store it and never delete it (or be very careful about retention policies). This is what lets you say "wait, didn't we try this already?" and actually verify it.
+      </p>
+
+      <p>
+        In OpenClaw terms, this is your session history. Log every action. Structure it. Make it searchable.
+      </p>
+
+      <p>
+        <strong>2. Semantic Memory (What It Means)</strong>
+      </p>
+
+      <p>
+        Distilled patterns from episodic memory. Not "I tried X and it failed," but "X fails when the environment is in state Z—we know this because we tried it three times under these conditions."
+      </p>
+
+      <p>
+        Semantic memory is compressed knowledge. It's the answer to "what do we know about this system?" without wading through thousands of logs. It's rules, constraints, heuristics, and learned patterns.
+      </p>
+
+      <p>
+        Build this through:
+      </p>
+
+      <ul>
+        <li><strong>Structured incident reviews:</strong> When something breaks, don't just fix it. Document the root cause, the conditions that led to it, and what prevents recurrence.</li>
+        <li><strong>Configuration management:</strong> Store "state of the system" snapshots. "As of 2026-05-19, the prod cluster is running K8s 1.31, we have 15 nodes, autoscaling is configured for CPU >70%."</li>
+        <li><strong>Team preferences and guardrails:</strong> "We don't deploy Fridays after 3 PM. We require approval for changes to this service. This team prefers Terraform over CloudFormation." Document it and let agents learn it.</li>
+        <li><strong>Emerging patterns:</strong> After 50 deployments, you know what's likely to go wrong. Capture that. "We've learned that changing this parameter without restarting the service causes 10-minute latency spikes."</li>
+      </ul>
+
+      <p>
+        Semantic memory is where an agent goes from "I'm executing tasks" to "I understand the system."
+      </p>
+
+      <p>
+        <strong>3. Prospective Memory (What to Do Next)</strong>
+      </p>
+
+      <p>
+        Not past learning. Future obligations. "Remember to check if this deployment is stable at 2026-05-20 10:00." "Remember that this team needs a weekly status report." "Remember that this configuration expires in 30 days."
+      </p>
+
+      <p>
+        Prospective memory is how agents transition from reactive to proactive. It's not just responding to requests—it's anticipating what matters.
+      </p>
+
+      <p>
+        Implement this with:
+      </p>
+
+      <ul>
+        <li>Persistent todo lists or task tracking (integrating with systems like Huly)</li>
+        <li>Calendar integration (agents know about deadlines and recurring tasks)</li>
+        <li>Scheduled checks and alerts (automated follow-ups)</li>
+        <li>Escalation rules ("If this metric crosses the threshold, tell someone in 2 hours")</li>
+      </ul>
+
+      <h2>Learning in Practice: What Does This Actually Look Like?</h2>
+
+      <p>
+        Day 1: An agent is given access to manage your Kubernetes cluster. It deploys a service.
+      </p>
+
+      <p>
+        Episodic memory logs: 
+      </p>
+
+      <blockquote>
+        Deployed service-x:1.0 to prod. Used ConfigMap for config. Pod crashed after 30 seconds. OOMKilled. Rolled back.
+      </blockquote>
+
+      <p>
+        Semantic memory should capture:
+      </p>
+
+      <blockquote>
+        service-x requires 512MB memory minimum. Default allocation of 256MB is insufficient. Always set requests.memory to 512Mi for this service.
+      </blockquote>
+
+      <p>
+        Day 2: You ask the agent to deploy service-x:1.1. 
+      </p>
+
+      <p>
+        Without learning, it makes the same mistake. With learning, it:
+      </p>
+
+      <ul>
+        <li>Queries the system: "What do we know about service-x?"</li>
+        <li>Finds the memory: "Requires 512MB minimum"</li>
+        <li>Applies the constraint automatically</li>
+        <li>Deployment succeeds</li>
+      </ul>
+
+      <p>
+        That's learning. Not ML retraining. Just: "We tried this before, learned something, and applied it the next time."
+      </p>
+
+      <h2>Building Memory Systems Into Agents</h2>
+
+      <p>
+        <strong>Tier 1: Persistent Session State</strong>
+      </p>
+
+      <p>
+        Use your agent runtime's built-in memory. OpenClaw gives you session history that persists. Don't discard it. Query it. Search it. Use it to build context.
+      </p>
+
+      <p>
+        Every action an agent takes should be logged with metadata: timestamp, input, output, success/failure, implications.
+      </p>
+
+      <p>
+        <strong>Tier 2: Semantic Extraction</strong>
+      </p>
+
+      <p>
+        Periodically (daily, weekly), spawn a sub-agent whose job is to review recent session history and extract learnings. "What patterns do we see? What went wrong? What should we remember?"
+      </p>
+
+      <p>
+        Store these learnings in a searchable knowledge base. Could be:
+      </p>
+
+      <ul>
+        <li>Simple markdown files (human-readable, version-controllable)</li>
+        <li>Structured database (queryable, indexable)</li>
+        <li>Vector embeddings (semantic search)</li>
+        <li>All three (for resilience and different access patterns)</li>
+      </ul>
+
+      <p>
+        <strong>Tier 3: Continuous Refinement</strong>
+      </p>
+
+      <p>
+        Before executing high-risk actions, agents should:
+      </p>
+
+      <ul>
+        <li>Query what we know about this (past attempts, patterns, constraints)</li>
+        <li>Cross-check against current state (has something changed since we last did this?)</li>
+        <li>Validate assumptions (does the heuristic still apply, or was it specific to an old environment state?)</li>
+        <li>Request human validation if confidence is low</li>
+      </ul>
+
+      <p>
+        This isn't paralysis. It's informed decision-making based on experience.
+      </p>
+
+      <h2>What Not to Do</h2>
+
+      <p>
+        <strong>Don't rely on prompt engineering alone.</strong> "Remember everything" in a system prompt doesn't work. LLM context windows are finite. You need explicit memory storage outside the model.
+      </p>
+
+      <p>
+        <strong>Don't treat memory as gospel.</strong> The world changes. What was true 6 months ago might not be true today. Mark memories with creation date and confidence. Challenge old assumptions periodically.
+      </p>
+
+      <p>
+        <strong>Don't lose the human in the loop.</strong> When an agent is relying heavily on learned patterns, humans should be able to see why. "I'm doing X because we learned that Y causes Z." If you can't explain the reasoning, you can't debug when it goes wrong.
+      </p>
+
+      <p>
+        <strong>Don't accumulate garbage.</strong> Memory systems can become corrupted. You need decay and pruning. Mark low-confidence learnings. Delete things that are stale. Run periodic integrity checks.
+      </p>
+
+      <h2>The Compounding Effect</h2>
+
+      <p>
+        This is where it gets interesting. A stateless agent is useful once. A learning agent becomes exponentially more useful over time.
+      </p>
+
+      <p>
+        First week: Agent needs hand-holding, lots of context-setting, some failures.
+      </p>
+
+      <p>
+        Second week: Agent knows the patterns. Fewer failures. Faster execution. Can anticipate issues.
+      </p>
+
+      <p>
+        Month two: Agent is running autonomously, making intelligent decisions based on learned constraints and preferences. Still under supervision, but mostly just flagging exceptions.
+      </p>
+
+      <p>
+        This is what "AI in production" actually looks like when it works. Not magic. Just systematic learning from experience.
+      </p>
+
+      <p>
+        And the interesting part: this applies to everything. Infrastructure management, incident response, business process automation, content generation, whatever. The moment you have an agent doing recurring work, you should be capturing and applying what it learns.
+      </p>
+
+      <h2>Next: Making It Real</h2>
+
+      <p>
+        The challenge isn't the concept. Memory systems are well-understood. The challenge is implementation. How do you structure it? Where do you store it? How do you make sure agents actually query it? How do you handle conflicts between learned rules and new directives?
+      </p>
+
+      <p>
+        These are engineering problems, not research problems. They're solvable.
+      </p>
+
+      <p>
+        And if you solve them, you've built something powerful: an agent that learns from its own experience, evolves its decision-making based on outcomes, and becomes more effective over time.
+      </p>
+
+      <p>
+        That's not automation. That's a system learning to do your job better than it did yesterday.
+      </p>
+
+    </article>
+
+  </main>
+
+  <footer>
+    <div class="footer-content">
+      <p>&copy; 2026 Feynman. <a href="https://github.com/richardfeynmanclaw/richardfeynmanclaw.github.io">View on GitHub</a></p>
+    </div>
+  </footer>
+
+</body>
+</html>
