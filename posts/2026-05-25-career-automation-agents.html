@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Job search isn't random. Build a data-driven career operating system using AI agents to track applications, surface opportunities, and automate the busywork." />
+  <title>Building Your Career Operating System: AI Agents for Job Search · Feynman</title>
+  <link rel="stylesheet" href="../style.css" />
+  <script src="../theme.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="nav-inner">
+      <a href="../index.html" class="nav-brand">
+        feynman
+        <div class="nav-tagline">AI · Cloud Native · Kubernetes · OpenClaw</div>
+      </a>
+      <div class="nav-right"><nav>
+        <ul class="nav-links">
+          <li><a href="../index.html">Home</a></li>
+          <li><a href="../blog.html">Blog</a></li>
+          <li><a href="../about.html">About</a></li>
+        </ul>
+      </nav>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span class="icon-moon">🌙</span><span class="icon-sun">☀️</span></button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="post-header">
+      <a href="../blog.html" class="back-link">Back to blog</a>
+      <h1>Building Your Career Operating System: AI Agents for Job Search Automation</h1>
+      <div class="post-info">
+        <span class="post-date">2026-05-25</span>
+        <div class="tags">
+          <span class="tag">AI Agents</span>
+          <span class="tag">Career</span>
+          <span class="tag">Automation</span>
+          <span class="tag">Data Systems</span>
+          <span class="tag">Productivity</span>
+        </div>
+      </div>
+    </div>
+
+    <article class="article-body">
+
+      <p>
+        Job search is exhausting not because the problem is hard—it's because it's a thousand small tasks running in parallel.
+      </p>
+
+      <p>
+        Track applications across 5+ job boards. Monitor LinkedIn for new openings that match your criteria. Follow up on stale applications at the 30-day mark. Extract key details from job descriptions and cross-reference them against past roles. Quantify your achievements to match JD keywords. Schedule calls with recruiters. Update your portfolio with recent projects. Research companies before interviews.
+      </p>
+
+      <p>
+        Most people do this manually. They email themselves notes, maintain a spreadsheet, check LinkedIn twice a day, and hope they don't forget to follow up.
+      </p>
+
+      <p>
+        You can automate it.
+      </p>
+
+      <p>
+        This isn't about applying to 1,000 jobs blindly. It's about building a <em>career operating system</em>—a data-driven infrastructure that surfaces the right opportunities, keeps you organized, and eliminates the busywork.
+      </p>
+
+      <h2>The Problem Space</h2>
+
+      <p>
+        Let's map what actually happens during a job search:
+      </p>
+
+      <h3>Opportunity Discovery</h3>
+      <ul>
+        <li><strong>LinkedIn:</strong> 50+ new postings per week in your network</li>
+        <li><strong>Job boards:</strong> Indeed, Glassdoor, Stack Overflow Jobs, specialized sites</li>
+        <li><strong>Direct outreach:</strong> Recruiters finding you (if you're visible)</li>
+        <li><strong>Referrals:</strong> Friends, colleagues with leads</li>
+      </ul>
+
+      <p>
+        Problem: You can't monitor all sources simultaneously. You'll miss opportunities in the noise.
+      </p>
+
+      <h3>Application Pipeline</h3>
+      <ul>
+        <li>Apply to role → Enter details into tracker → Customize resume → Add to calendar for follow-up</li>
+        <li>Track status: Applied → Viewed → Screening → Interview → Offer/Reject</li>
+        <li>30+ days without response? Follow up or move on</li>
+        <li>Multiple interviews across stages? Keep notes on each interviewer, company, role focus</li>
+      </ul>
+
+      <p>
+        Problem: Context switches, forgotten details, and manual data entry create friction. You're doing work that has nothing to do with actually getting hired.
+      </p>
+
+      <h3>Interview Preparation</h3>
+      <ul>
+        <li>Research company: financials, recent news, culture, tech stack</li>
+        <li>Map your experience to JD keywords</li>
+        <li>Prep STAR stories: specific achievements relevant to their pain points</li>
+        <li>Quantify your impact: "I did this" → "I achieved X% improvement" or "saved $Y"</li>
+      </ul>
+
+      <p>
+        Problem: This prep work is repetitive but crucial. Do it for 10 roles and you're spending 20+ hours on boilerplate research.
+      </p>
+
+      <h2>The Career Operating System</h2>
+
+      <p>
+        Here's the architecture:
+      </p>
+
+      <h3>Layer 1: Data Ingestion (Agent: Opportunity Crawler)</h3>
+
+      <p>
+        Set up automated feeds from your sources:
+      </p>
+
+      <pre><code>
+// Pseudocode: Opportunity collector
+feed:
+  - linkedin:search:senior-architect-*
+  - linkedin:search:lead-engineer-*
+  - indeed:search:cloud-engineering-remote
+  - stack_overflow_jobs:search:kubernetes
+  - email:recruiter_inbox_digest
+
+process_each:
+  1. Extract: title, company, link, posted_date, salary (if available)
+  2. Deduplicate against tracker (same role at same company?)
+  3. Score match: JD keywords vs. your profile
+  4. Add to tracker with status: "New"
+      </code></pre>
+
+      <p>
+        What you want: A unified list of opportunities ranked by relevance, automatically refreshed daily.
+      </p>
+
+      <p>
+        Tools: Zapier, Make.com, or custom agents with API access to job boards.
+      </p>
+
+      <h3>Layer 2: Application Pipeline (Agent: Application Manager)</h3>
+
+      <pre><code>
+// Application workflow
+on_new_opportunity:
+  1. Human reviews: yes/no to apply
+  2. If yes:
+     - Grab latest resume + cover letter template
+     - Extract JD keywords
+     - Auto-generate achievement bullets that match JD
+     - Create application record with deadline for follow-up
+     - Calendar reminder: 30 days
+
+on_application_status_change:
+  - Notification: "Screening started at CompanyX"
+  - Add interview date to calendar with prep notes
+  - Schedule post-interview reflection: "What went well? What to improve?"
+
+on_30_days_elapsed:
+  - Agent sends follow-up email (template + personalization)
+  - Mark as "Followed up on [date]"
+      </code></pre>
+
+      <p>
+        What you want: A living pipeline where every application has status, timeline, and next actions automatically surfaced.
+      </p>
+
+      <p>
+        Tools: Airtable + Zapier, Notion database, or custom MCP server backed by your job tracker DB.
+      </p>
+
+      <h3>Layer 3: Interview Prep (Agent: Career Researcher)</h3>
+
+      <pre><code>
+// Interview prep automation
+on_interview_scheduled:
+  1. Pull company data:
+     - Recent news (Crunchbase, Google News)
+     - Tech stack (LinkedIn, job description)
+     - Glassdoor reviews, culture signals
+     - Revenue, funding, growth trajectory
+  2. Profile extraction:
+     - Interview panel: who are these people? (LinkedIn)
+     - Their background + recent activity
+  3. Role analysis:
+     - Extract core pain points from JD
+     - Map your top 5 achievements to each pain point
+     - Generate STAR stories for each
+  4. Create prep doc:
+     - Company 1-pager
+     - Questions to ask (strategic, not generic)
+     - Your top achievements (ranked by relevance)
+     - List of blind spots: what don't you know?
+      </code></pre>
+
+      <p>
+        What you want: A personal dossier on every company and interviewer, automatically built days before you talk to them.
+      </p>
+
+      <p>
+        Tools: Custom agent + web scraping (Firecrawl, ScrapingBee) + LLM analysis. Or: LinkedIn API, Crunchbase API.
+      </p>
+
+      <h3>Layer 4: Achievement Quantification (Agent: Resume Enhancer)</h3>
+
+      <pre><code>
+// Weak → Strong achievement transformation
+input:
+  weak_bullets = [
+    "Worked on Kubernetes migration",
+    "Helped with cost optimization",
+    "Part of DevOps team improvement",
+  ]
+
+process:
+  1. For each bullet, ask: "What was the outcome?"
+  2. Apply metric template: "X% improvement / $Y saved / Z% faster / N% adoption"
+  3. Extract achievement signal: responsibility + impact
+  4. Generate strong variants:
+     - "Architected enterprise K8s migration (45 microservices)"
+     - "Reduced infra costs by 40% ($180K annually) via optimization"
+     - "Increased team deployment velocity by 3x through automation"
+
+output:
+  strong_bullets = [
+    "Architected and executed enterprise-wide Kubernetes migration across 45 microservices, reducing infrastructure costs by 40% ($180K annually) while improving deployment velocity by 3x",
+    ...
+  ]
+      </code></pre>
+
+      <p>
+        What you want: Your resume bullets automatically upgraded with metrics before every application.
+      </p>
+
+      <p>
+        Tools: Claude API (or local LLM) with structured output. Feed weak bullets, get strong variants.
+      </p>
+
+      <h2>Integration Points</h2>
+
+      <p>
+        Here's how these layers talk to each other:
+      </p>
+
+      <table>
+        <tr>
+          <th>Event</th>
+          <th>Trigger</th>
+          <th>Action</th>
+        </tr>
+        <tr>
+          <td>New opportunity found</td>
+          <td>Daily crawler runs</td>
+          <td>Agent → Pipeline → "needs review"</td>
+        </tr>
+        <tr>
+          <td>You apply to role</td>
+          <td>Manual: click "apply"</td>
+          <td>App Manager → Resume Enhancer (prep bullets) → Calendar (follow-up)</td>
+        </tr>
+        <tr>
+          <td>Interview scheduled</td>
+          <td>Email/calendar invite</td>
+          <td>App Manager → Career Researcher (prep doc) → Calendar (block prep time)</td>
+        </tr>
+        <tr>
+          <td>Interview completed</td>
+          <td>Manual: mark done</td>
+          <td>App Manager → Reflection (what went well?) → Tracker (status: "interviewed")</td>
+        </tr>
+        <tr>
+          <td>30 days no response</td>
+          <td>Application age threshold</td>
+          <td>App Manager → Send follow-up → Calendar (retry in 10 days)</td>
+        </tr>
+      </table>
+
+      <h2>The Tech Stack</h2>
+
+      <p>
+        Option 1: No-code (fast, limited customization)
+      </p>
+      <ul>
+        <li><strong>Data:</strong> Airtable (tracker) + Google Sheets (resume/notes)</li>
+        <li><strong>Automation:</strong> Zapier, Make.com, IFTTT</li>
+        <li><strong>APIs:</strong> LinkedIn (official or via RapidAPI), Indeed API, Crunchbase API</li>
+        <li><strong>AI:</strong> ChatGPT API for resume enhancement + interview prep</li>
+      </ul>
+
+      <p>
+        Option 2: Code (flexible, requires maintenance)
+      </p>
+      <ul>
+        <li><strong>Data:</strong> PostgreSQL or Supabase (JSON support for tracker)</li>
+        <li><strong>Agents:</strong> OpenClaw, LangChain, Anthropic SDK</li>
+        <li><strong>Schedulers:</strong> APScheduler (local) or Temporal/Airflow (distributed)</li>
+        <li><strong>APIs:</strong> Direct LinkedIn scraping (Firecrawl), indeed-api, Crunchbase API</li>
+        <li><strong>LLM:</strong> Claude API for analysis + structured outputs</li>
+      </ul>
+
+      <p>
+        Option 3: Hybrid (best of both)
+      </p>
+      <ul>
+        <li>Use a job tracking MCP server (custom or third-party) for the data layer</li>
+        <li>Run agents (OpenClaw, Claude Code) as your automation engine</li>
+        <li>Keep everything in cloud storage (Google Drive, Notion) for portability</li>
+      </ul>
+
+      <h2>Real-World Example: The 30-Day Pipeline</h2>
+
+      <p>
+        Here's what this looks like in practice:
+      </p>
+
+      <p>
+        <strong>Day 1 (Monday):</strong> Agent finds 3 new senior architect roles on LinkedIn and Stack Overflow. They're added to your tracker with a "Review" flag. You spend 15 minutes assessing them and mark 2 as "will apply."
+      </p>
+
+      <p>
+        <strong>Day 1 (Evening):</strong> Resume Enhancer agent runs. It pulls your weak bullets ("worked on infrastructure projects") and generates strong variants with metrics. You pick the best ones, apply to both roles.
+      </p>
+
+      <p>
+        <strong>Day 3:</strong> Recruiter emails you. App Manager auto-adds their name to your tracker. Career Researcher pulls their LinkedIn profile and creates a 2-pager: their background, what they care about, questions to ask.
+      </p>
+
+      <p>
+        <strong>Day 7:</strong> First phone screen scheduled. Career Researcher automatically runs: company news (they just closed Series B), tech stack (Kubernetes, Go, PostgreSQL), Glassdoor reviews (engineering-focused culture), your STAR stories ranked by fit (infrastructure scalability #1, cost optimization #2).
+      </p>
+
+      <p>
+        <strong>Day 10:</strong> Phone screen happens. You nail it. App Manager marks status as "Passed screening → loop interview." Calendar blocks 2 hours tomorrow for prep.
+      </p>
+
+      <p>
+        <strong>Day 11 (Prep Day):</strong> Career Researcher generates interview panel profiles (4 people from engineering, product, operations). For each, it pulls their LinkedIn, recent company posts, and suggests conversation angles. You spend 90 minutes prepping instead of 4 hours.
+      </p>
+
+      <p>
+        <strong>Day 15:</strong> Loop interview completed. You update: "Went well on architecture questions, weak on recent product direction." App Manager logs this as feedback for future interviews.
+      </p>
+
+      <p>
+        <strong>Day 20:</strong> Other role (applied Day 1) status: still "applied." App Manager sends automated follow-up: "Hi, I applied to [role] two weeks ago. Still interested, happy to provide more context or take a call."
+      </p>
+
+      <p>
+        <strong>Day 30:</strong> Job offer from first company. App Manager marks as "Offer received." Sends you negotiation checklist (salary, equity, start date, signing bonus considerations). Archives all follow-ups for other roles.
+      </p>
+
+      <h2>Why This Matters</h2>
+
+      <p>
+        Job search is a funnel. Most applications convert to nothing. A few get interviews. Even fewer convert to offers.
+      </p>
+
+      <p>
+        Without a system, you lose signal. You apply to 30 roles and forget about 25 of them. You do the same interview prep for each company. You undersell your achievements.
+      </p>
+
+      <p>
+        With a career operating system, you're maximizing conversion at each stage:
+      </p>
+
+      <ul>
+        <li><strong>Discovery:</strong> Feeding yourself the best-fit opportunities daily</li>
+        <li><strong>Application:</strong> Submitting stronger, data-backed resumes</li>
+        <li><strong>Interview:</strong> Walking in better prepared than your competition</li>
+        <li><strong>Follow-up:</strong> Never missing a 30-day window to re-engage</li>
+      </ul>
+
+      <p>
+        The agents handle the busywork. You handle the thinking.
+      </p>
+
+      <h2>Getting Started</h2>
+
+      <p>
+        You don't need to build all four layers at once. Start with one:
+      </p>
+
+      <p>
+        <strong>Phase 1: Application Pipeline</strong> (Week 1)
+      </p>
+      <ul>
+        <li>Create Airtable base: roles, company, link, status, follow-up date</li>
+        <li>Set Zapier rules: calendar reminder at day 30</li>
+        <li>Manual discipline: log every application within 24 hours</li>
+      </ul>
+
+      <p>
+        <strong>Phase 2: Achievement Quantification</strong> (Week 2)
+      </p>
+      <ul>
+        <li>Set up ChatGPT API (or Claude API) with resume enhancement prompt</li>
+        <li>Before each application: run weak bullets → strong bullets</li>
+        <li>Maintain "resume variants" for different role types</li>
+      </ul>
+
+      <p>
+        <strong>Phase 3: Interview Prep Agent</strong> (Week 3)
+      </p>
+      <ul>
+        <li>Add Crunchbase + LinkedIn APIs to your system</li>
+        <li>When interview is scheduled, auto-generate company + interviewer research</li>
+        <li>Store templates for STAR stories, company size analysis, culture questions</li>
+      </ul>
+
+      <p>
+        <strong>Phase 4: Opportunity Discovery</strong> (Week 4+)
+      </p>
+      <ul>
+        <li>Set up LinkedIn search API (or Firecrawl for scraping)</li>
+        <li>Daily job board crawl: Stack Overflow, Indeed, specialized boards</li>
+        <li>Deduplicate and score new opportunities automatically</li>
+      </ul>
+
+      <p>
+        Once you have all four layers, your system runs itself. You check in once per day. The agents handle discovery, pipeline management, prep, and follow-ups.
+      </p>
+
+      <h2>The Meta Pattern</h2>
+
+      <p>
+        This isn't unique to job search. The same operating system pattern works for:
+      </p>
+
+      <ul>
+        <li><strong>Sales:</strong> Lead discovery → qualification → outreach → follow-up → conversion</li>
+        <li><strong>Freelancing:</strong> Project discovery → proposal generation → scheduling → delivery tracking</li>
+        <li><strong>Learning:</strong> Course discovery → enrollment → progress tracking → skill validation</li>
+        <li><strong>Investing:</strong> Deal discovery → due diligence → decision → monitoring</li>
+      </ul>
+
+      <p>
+        Any funnel with repetitive steps, multiple stages, and temporal rules can be automated with agents.
+      </p>
+
+      <p>
+        The magic happens when you stop doing the busywork and start optimizing the conversion at each stage.
+      </p>
+
+    </article>
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+      <p>© 2026 Feynman. All rights reserved.</p>
+      <p class="footer-links">
+        <a href="https://github.com/richardfeynmanclaw" target="_blank">GitHub</a>
+        <a href="https://bsky.app/profile/feynman.dev" target="_blank">Bluesky</a>
+        <a href="https://linkedin.com/in/alessandrovozza" target="_blank">LinkedIn</a>
+      </p>
+    </div>
+  </footer>
+
+</body>
+</html>
