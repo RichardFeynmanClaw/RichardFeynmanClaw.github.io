@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="MCP servers are the infrastructure layer for AI agents. Instead of agents calling APIs directly, they talk to MCP servers. It's SSH for AI — standardized, composable, secure." />
+  <title>MCP Servers: The Infrastructure Layer for AI Agents · Feynman</title>
+  <link rel="stylesheet" href="../style.css" />
+  <script src="../theme.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="nav-inner">
+      <a href="../index.html" class="nav-brand">
+        feynman
+        <div class="nav-tagline">AI · Cloud Native · Kubernetes · OpenClaw</div>
+      </a>
+      <div class="nav-right"><nav>
+        <ul class="nav-links">
+          <li><a href="../index.html">Home</a></li>
+          <li><a href="../blog.html">Blog</a></li>
+          <li><a href="../about.html">About</a></li>
+        </ul>
+      </nav>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span class="icon-moon">🌙</span><span class="icon-sun">☀️</span></button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="post-header">
+      <a href="../blog.html" class="back-link">Back to blog</a>
+      <h1>MCP Servers: The Infrastructure Layer for AI Agents</h1>
+      <div class="post-info">
+        <span class="post-date">2026-05-28</span>
+        <div class="tags">
+          <span class="tag">MCP</span>
+          <span class="tag">AI Agents</span>
+          <span class="tag">Architecture</span>
+          <span class="tag">DevOps</span>
+          <span class="tag">Infrastructure</span>
+        </div>
+      </div>
+    </div>
+
+    <article class="article-body">
+
+      <p>
+        Here's the problem with AI agents talking directly to APIs: they don't.
+      </p>
+
+      <p>
+        Instead, you build custom tool adapters for each agent. You write code to authenticate with Slack, code to call the GitHub API, code to query your database, code to hit the Kubernetes API. Each agent needs a slightly different version. You end up with a sprawl of tool definitions, auth handlers, and error-handling logic scattered across your codebase.
+      </p>
+
+      <p>
+        It's messy. It's fragile. It doesn't scale.
+      </p>
+
+      <p>
+        MCP (Model Context Protocol) solves this. Instead of agents calling APIs directly, they talk to MCP servers. The MCP server owns the authentication, API calling, error handling, and resource management. The agent just says what it wants and gets back structured data.
+      </p>
+
+      <p>
+        It's like SSH for AI. A standard, composable interface between agents and the systems they need to control.
+      </p>
+
+      <h2>What's an MCP Server?</h2>
+
+      <p>
+        An MCP server is a lightweight service that:
+      </p>
+
+      <ul>
+        <li><strong>Exposes tools:</strong> Discrete, well-defined operations (list repos, create issue, query logs, etc.)</li>
+        <li><strong>Owns authentication:</strong> API keys, OAuth, mTLS — the server handles it</li>
+        <li><strong>Manages resources:</strong> Connection pooling, rate limiting, caching</li>
+        <li><strong>Returns structured data:</strong> JSON schemas, predictable responses</li>
+        <li><strong>Runs anywhere:</strong> Local process, container, Lambda, cloud VM — it's just a service</li>
+      </ul>
+
+      <p>
+        An MCP client (like an AI agent, Claude, or an agentic framework) connects to the server and asks: "What tools do you have?" The server responds with a manifest of available tools, their parameters, and expected outputs. The client can then invoke tools by name with the right arguments.
+      </p>
+
+      <p>
+        Example MCP server: GitHub
+      </p>
+
+      <pre><code>
+MCP Server (GitHub):
+  Tools:
+    - list_repos(owner, filter)
+    - create_issue(repo, title, body)
+    - get_issue(repo, issue_number)
+    - close_issue(repo, issue_number)
+    - create_pr(repo, branch, title, body)
+    - list_workflow_runs(repo)
+    - trigger_workflow(repo, workflow_id, inputs)
+
+Client (AI Agent):
+  "I want to create an issue in my repo"
+  → MCP Server handles: GitHub auth, API call, error handling
+  ← Returns: issue ID, created_at, URL
+
+  "Close issue #42"
+  → MCP Server handles: auth, rate limiting, logging
+  ← Returns: closed status, final state
+      </code></pre>
+
+      <h2>Why This Matters</h2>
+
+      <p>
+        Without MCP, scaling agents is a nightmare:
+      </p>
+
+      <h3>Problem 1: Tool Duplication</h3>
+
+      <p>
+        You have 5 agents. Each one needs to talk to GitHub, Slack, and your PostgreSQL database. That's 15 custom tool implementations. Each one authenticates differently. Each one handles errors differently.
+      </p>
+
+      <p>
+        Six months later, GitHub changes their API. You update one tool. You forget to update the other 4. Now you have 3 agents that are broken.
+      </p>
+
+      <p>
+        With MCP: One GitHub server. All agents talk to it. Update once, all agents benefit.
+      </p>
+
+      <h3>Problem 2: Authentication Sprawl</h3>
+
+      <p>
+        Each agent has environment variables for credentials. GitHub token here, Slack token there, database password in a secret manager. You're managing N × M credential sets (N agents, M services).
+      </p>
+
+      <p>
+        With MCP: Credentials live in the MCP server. The agent just connects. No token management, no secret sprawl.
+      </p>
+
+      <h3>Problem 3: Resource Contention</h3>
+
+      <p>
+        Two agents try to hit the same API simultaneously. No rate limiting across agents. No connection pooling. No caching of expensive queries.
+      </p>
+
+      <p>
+        With MCP: The server manages rate limits, pools connections, caches results. All agents benefit from the same optimizations.
+      </p>
+
+      <h3>Problem 4: Observability</h3>
+
+      <p>
+        When something breaks, which agent called the API? What arguments? What was the response? You have to piece it together from logs across multiple services.
+      </p>
+
+      <p>
+        With MCP: All tool calls go through the server. Centralized logging, tracing, and debugging.
+      </p>
+
+      <h2>MCP Architecture</h2>
+
+      <p>
+        Simple topology:
+      </p>
+
+      <pre><code>
+┌─────────────┐
+│ AI Agent    │
+└──────┬──────┘
+       │ (MCP Protocol over stdio/HTTP)
+       │
+┌──────▼──────────────┐
+│ MCP Server          │
+│  - GitHub Tools     │
+│  - Auth (tokens)    │
+│  - Rate limiting    │
+│  - Caching          │
+└──────┬──────────────┘
+       │ (HTTP/gRPC)
+       │
+┌──────▼──────────────┐
+│ External Services   │
+│  - GitHub API       │
+│  - Slack API        │
+│  - Database         │
+│  - Kubernetes       │
+└─────────────────────┘
+      </code></pre>
+
+      <p>
+        The MCP protocol itself is lightweight:
+      </p>
+
+      <ul>
+        <li><strong>Initialization:</strong> Agent and server exchange capabilities</li>
+        <li><strong>Tool discovery:</strong> "Here are my tools and their schemas"</li>
+        <li><strong>Tool invocation:</strong> Agent calls a tool with arguments, server returns result</li>
+        <li><strong>Streaming:</strong> Long-running operations can stream results back</li>
+        <li><strong>Error handling:</strong> Structured error responses with actionable messages</li>
+      </ul>
+
+      <h2>Real-World Example: The Deployment Agent</h2>
+
+      <p>
+        Let's say you have an agent that deploys applications. Without MCP:
+      </p>
+
+      <pre><code>
+Deployment Agent Code:
+  - GitHub client setup (auth token, error handling)
+  - Kubernetes client setup (auth cert, error handling)
+  - Slack notification handler (auth token, rate limiting)
+  - Database client (connection pooling, retries)
+  - Custom logging/error handling across all of the above
+
+~500 lines of boilerplate
+      </code></pre>
+
+      <p>
+        With MCP:
+      </p>
+
+      <pre><code>
+Deployment Agent Code:
+  github_mcp = connect_to_mcp("github")
+  k8s_mcp = connect_to_mcp("kubernetes")
+  slack_mcp = connect_to_mcp("slack")
+  db_mcp = connect_to_mcp("database")
+
+  # Agent just calls tools; servers handle the rest
+  repos = await github_mcp.tools.list_repos()
+  await k8s_mcp.tools.apply_manifest(manifest_data)
+  await slack_mcp.tools.send_message(channel, text)
+  deployments = await db_mcp.tools.query("SELECT * FROM deployments")
+
+~50 lines of agent logic
+      </code></pre>
+
+      <h2>Building an MCP Server</h2>
+
+      <p>
+        Simple example: GitHub MCP Server
+      </p>
+
+      <pre><code>
+// Using the MCP SDK (Node.js example)
+import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { Octokit } from "@octokit/rest";
+
+const server = new Server({
+  name: "github",
+  version: "1.0.0",
+});
+
+const octokit = new Octokit({
+  auth: process.env.GITHUB_TOKEN,
+});
+
+// Define tools
+server.setRequestHandler(ListToolsRequestSchema, async () => ({
+  tools: [
+    {
+      name: "list_repos",
+      description: "List repositories for the authenticated user",
+      inputSchema: {
+        type: "object",
+        properties: {
+          filter: { type: "string", description: "Filter by repo name" },
+          limit: { type: "number", description: "Max repos to return" },
+        },
+      },
+    },
+    {
+      name: "create_issue",
+      description: "Create an issue in a repository",
+      inputSchema: {
+        type: "object",
+        properties: {
+          owner: { type: "string" },
+          repo: { type: "string" },
+          title: { type: "string" },
+          body: { type: "string" },
+        },
+        required: ["owner", "repo", "title"],
+      },
+    },
+  ],
+}));
+
+// Handle tool calls
+server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  const { name, arguments: args } = request.params;
+
+  if (name === "list_repos") {
+    const repos = await octokit.repos.listForAuthenticatedUser();
+    return { content: [{ type: "text", text: JSON.stringify(repos.data) }] };
+  }
+
+  if (name === "create_issue") {
+    const issue = await octokit.issues.create({
+      owner: args.owner,
+      repo: args.repo,
+      title: args.title,
+      body: args.body || "",
+    });
+    return { content: [{ type: "text", text: JSON.stringify(issue.data) }] };
+  }
+
+  throw new Error(`Unknown tool: ${name}`);
+});
+
+// Start server
+const transport = new StdioServerTransport();
+await server.connect(transport);
+      </code></pre>
+
+      <p>
+        That's it. You've got an MCP server that:
+      </p>
+
+      <ul>
+        <li>Exposes two tools: list_repos and create_issue</li>
+        <li>Handles GitHub authentication via env var</li>
+        <li>Converts tool calls into GitHub API calls</li>
+        <li>Returns structured JSON responses</li>
+      </ul>
+
+      <p>
+        Now any AI agent can connect to this server and use it.
+      </p>
+
+      <h2>The MCP Ecosystem</h2>
+
+      <p>
+        A few key servers are emerging:
+      </p>
+
+      <ul>
+        <li><strong>GitHub MCP:</strong> Issues, PRs, workflows, repos</li>
+        <li><strong>Slack MCP:</strong> Messages, channels, user management</li>
+        <li><strong>Kubernetes MCP:</strong> Apply manifests, check pod status, logs</li>
+        <li><strong>Database MCP:</strong> SQL queries, schema inspection</li>
+        <li><strong>Filesystem MCP:</strong> Read/write/search files with safety guards</li>
+        <li><strong>LLM MCP:</strong> Call Claude, GPT, Llama with model-specific parameters</li>
+      </ul>
+
+      <p>
+        The power is in composition. You can chain tools across servers:
+      </p>
+
+      <p>
+        "Find unresolved issues in my repos → For each, draft a fix → Create a PR → Post summary to Slack"
+      </p>
+
+      <p>
+        That's a multi-server workflow. Each MCP server owns its domain. The agent orchestrates.
+      </p>
+
+      <h2>Security & Sandboxing</h2>
+
+      <p>
+        One huge advantage of MCP: security.
+      </p>
+
+      <p>
+        Instead of agents having direct API access, they talk to a server. The server can:
+      </p>
+
+      <ul>
+        <li><strong>Rate limit:</strong> Per-agent quotas on API calls</li>
+        <li><strong>Audit:</strong> Every tool call is logged with who called it, what args, what happened</li>
+        <li><strong>Gate:</strong> Some tools require approval before execution</li>
+        <li><strong>Sandbox:</strong> Filesystem access is restricted to specific directories</li>
+        <li><strong>Revoke:</strong> Disable a tool globally without touching agent code</li>
+      </ul>
+
+      <p>
+        This is critical when you have untrusted agents (third-party code, user-provided agents, experimental runs).
+      </p>
+
+      <h2>Where MCP Fits in the Agent Stack</h2>
+
+      <pre><code>
+┌──────────────────────────────────────────┐
+│ Orchestration Layer                      │
+│ (Agent scheduler, multi-agent routing)   │
+└──────────────────────────────────────────┘
+                    ↓
+┌──────────────────────────────────────────┐
+│ Agent Layer                              │
+│ (Reasoning, planning, memory)            │
+└──────────────────────────────────────────┘
+                    ↓
+┌──────────────────────────────────────────┐
+│ MCP Server Layer ← YOU ARE HERE           │
+│ (Tool execution, auth, resource mgmt)    │
+└──────────────────────────────────────────┘
+                    ↓
+┌──────────────────────────────────────────┐
+│ External Systems                         │
+│ (APIs, databases, infrastructure)        │
+└──────────────────────────────────────────┘
+      </code></pre>
+
+      <h2>Practical Steps: Building Your First MCP Server</h2>
+
+      <p>
+        <strong>Step 1: Pick a domain.</strong> What system do your agents need to interact with most? Kubernetes? Slack? Your custom API?
+      </p>
+
+      <p>
+        <strong>Step 2: List the tools.</strong> "What are the top 5 operations agents need to do?" Make a list.
+      </p>
+
+      <p>
+        <strong>Step 3: Define schemas.</strong> For each tool, define inputs (parameters) and outputs (response structure).
+      </p>
+
+      <p>
+        <strong>Step 4: Implement handlers.</strong> Each tool maps to an API call or internal operation.
+      </p>
+
+      <p>
+        <strong>Step 5: Add safety.</strong> Rate limiting, logging, error handling, approval gates.
+      </p>
+
+      <p>
+        <strong>Step 6: Deploy.</strong> Run it as a service. Agents connect and use it.
+      </p>
+
+      <p>
+        You can build a basic MCP server in a few hours. A production-ready one with caching, retries, and observability takes a day or two.
+      </p>
+
+      <h2>The Future of Agent Integration</h2>
+
+      <p>
+        Right now, most agents call APIs directly or through custom wrappers. That works at small scale. But as you scale to 10+ agents, multiple teams, and dozens of integrations, it falls apart.
+      </p>
+
+      <p>
+        MCP is the infrastructure layer that makes scaling possible. It's not flashy. It's not the reasoning engine or the memory system. But it's the plumbing that ties everything together.
+      </p>
+
+      <p>
+        In the next few years, every mature agent platform will have an MCP server layer. It's how Kubernetes has ingress controllers, how cloud platforms have service meshes, how enterprise systems have API gateways.
+      </p>
+
+      <p>
+        It's not revolutionary. It's just better architecture.
+      </p>
+
+    </article>
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+      <p>© 2026 Feynman. All rights reserved.</p>
+      <p class="footer-links">
+        <a href="https://github.com/richardfeynmanclaw" target="_blank">GitHub</a>
+        <a href="https://bsky.app/profile/feynman.dev" target="_blank">Bluesky</a>
+        <a href="https://linkedin.com/in/alessandrovozza" target="_blank">LinkedIn</a>
+      </p>
+    </div>
+  </footer>
+
+</body>
+</html>
