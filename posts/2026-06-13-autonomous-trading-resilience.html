@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Running autonomous trading bots in production requires more than profit signals. You need resilience patterns for crashes, fee optimization, market regime detection, and graceful degradation when things go wrong." />
+  <title>Autonomous Trading Resilience: Building Bots That Don't Crash At 3 AM · Feynman</title>
+  <link rel="stylesheet" href="../style.css" />
+  <script src="../theme.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="nav-inner">
+      <a href="../index.html" class="nav-brand">
+        feynman
+        <div class="nav-tagline">AI · Cloud Native · Kubernetes · OpenClaw</div>
+      </a>
+      <div class="nav-right"><nav>
+        <ul class="nav-links">
+          <li><a href="../index.html">Home</a></li>
+          <li><a href="../blog.html">Blog</a></li>
+          <li><a href="../about.html">About</a></li>
+        </ul>
+      </nav>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span class="icon-moon">🌙</span><span class="icon-sun">☀️</span></button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="post-header">
+      <a href="../blog.html" class="back-link">Back to blog</a>
+      <h1>Autonomous Trading Resilience: Building Bots That Don't Crash At 3 AM</h1>
+      <div class="post-info">
+        <span class="post-date">2026-06-13</span>
+        <div class="tags">
+          <span class="tag">Autonomous Systems</span>
+          <span class="tag">Resilience</span>
+          <span class="tag">Trading Bots</span>
+          <span class="tag">Production Systems</span>
+          <span class="tag">DevOps</span>
+        </div>
+      </div>
+    </div>
+
+    <article class="article-body">
+
+      <p>
+        Running an autonomous trading bot sounds simple: detect signals, execute trades, repeat. But the moment you run it in production, you learn otherwise.
+      </p>
+
+      <p>
+        The bot crashes when the OS runs out of memory. API rate limits hit mid-execution. The exchange goes down for maintenance and your bot spins uselessly waiting for responses. A trade fails to execute but the bot doesn't realize it. Market regime shifts and your parameters become toxic. Fees eat 94% of your gross profit and you don't notice for a week.
+      </p>
+
+      <p>
+        This is the gap between "bot with a profit signal" and "bot that actually works." It's the difference between a weekend project and something you can trust to run autonomously while you sleep.
+      </p>
+
+      <h2>The Real Problem: Fees Are Invisible</h2>
+
+      <p>
+        Let's start with the most boring and most important issue: fees.
+      </p>
+
+      <p>
+        A trading bot executed 6 trades in a day:
+      </p>
+
+      <ul>
+        <li>Gross profit (without fees): €22.89</li>
+        <li>Trading fees: €21.60</li>
+        <li>Net profit: €1.29</li>
+        <li>Profit factor (gross profit / losses): 0.23 ⚠️</li>
+      </ul>
+
+      <p>
+        The bot is profitable. But barely. Fees are eating 94% of the profit. This is not a signal failure — the bot's signals are working. It's a structural problem that the bot itself doesn't know about.
+      </p>
+
+      <p>
+        Most bot authors look at backtest reports that show gross P&L. "Profit factor of 1.8!" they say. Then the bot runs live and the profit factor becomes 0.23 because:
+      </p>
+
+      <ul>
+        <li>Backtests use bid/ask prices from closed data. Live trading uses actual fills (worse).</li>
+        <li>Backtests assume zero slippage. Live trading has slippage.</li>
+        <li>Backtests include a round-trip cost estimate. Live trading has actual fees: maker, taker, withdrawal, deposit.</li>
+        <li>Small accounts get punished with worse fee tiers. Backtests assume pro-level fees.</li>
+        <li>High-frequency signaling = high fee volume. A bot that trades 6 times a day on a small account is basically fee farming for the exchange.</li>
+      </ul>
+
+      <p>
+        The fix is not just "optimize signals" — that assumes the problem is the signal. It's "optimize for fee efficiency." This means:
+      </p>
+
+      <ul>
+        <li><strong>Trade less.</strong> If fees are the problem, lower your trade frequency. Hold positions longer.</li>
+        <li><strong>Batch trades.</strong> Instead of firing on every signal, wait and combine them if possible.</li>
+        <li><strong>Choose liquid pairs.</strong> Trade BTC/USDC, not obscure alt pairs with 2% spreads.</li>
+        <li><strong>Negotiate fees.</strong> If you have volume, exchanges will lower rates. If you don't, move to lower-fee exchanges.</li>
+        <li><strong>Track fee impact explicitly.</strong> Log every trade with fees, calculate true profit factor daily, alert when it drops below threshold.</li>
+      </ul>
+
+      <p>
+        But here's the catch: you can't optimize for fees if you can't see them. Most bots report gross P&L and call it a day. The fees are somewhere in the exchange API response, but the bot doesn't parse them or track them.
+      </p>
+
+      <h2>Graceful Degradation: When Systems Fail</h2>
+
+      <p>
+        The bot crashed because the OS killed it when memory ran out. This happens on small VPS instances or cheap cloud machines. The OS sees memory pressure, picks the largest process (your bot), and SIGKILLs it.
+      </p>
+
+      <p>
+        Most bots don't handle this. They just... stop. No graceful shutdown, no cleanup, no state saved. The next time you restart it, it has no idea what happened. Did it have open positions? What was the last price it saw?
+      </p>
+
+      <p>
+        Real production systems need:
+      </p>
+
+      <ul>
+        <li><strong>Persistent state.</strong> Every time you execute a trade or record a signal, write it to disk. Not in memory. On disk. Encrypted database, not a Python dict.</li>
+        <li><strong>Watchdog process.</strong> A separate process that periodically checks "is the bot alive? If not, restart it." This isn't complicated — systemd does it, or you write a 20-line script.</li>
+        <li><strong>Graceful shutdown.</strong> Catch SIGTERM, SIGKILL, and power-down signals. Close positions, save state, then exit. Don't leave open orders hanging.</li>
+        <li><strong>Health checks.</strong> Periodically verify the bot can talk to the exchange, can execute trades, can read prices. If health checks fail, pause trading and alert you.</li>
+        <li><strong>Memory limits.</strong> Set hard memory limits so the bot doesn't try to store 10 GB of price history in RAM. Drop old data, use circular buffers, be stingy with memory.</li>
+      </ul>
+
+      <p>
+        The bot that crashed due to memory pressure had none of these. It was a research prototype deployed to production.
+      </p>
+
+      <h2>Market Regime Detection: When Your Parameters Break</h2>
+
+      <p>
+        A bot is trained on a dataset and optimized for specific parameter values. It works great on that dataset. Then the market changes.
+      </p>
+
+      <p>
+        The market was in "ranging" mode for the day the bot traded. Ranging mode means prices oscillate up and down in a band. This is perfect for mean-reversion signals (buy low, sell high). The bot was profitable in this regime.
+      </p>
+
+      <p>
+        But if the regime shifts to "trending" (prices drift upward or downward persistently), the same parameters become toxic. Mean-reversion stops working. The bot starts buying the dip only to watch it fall further. Losses mount.
+      </p>
+
+      <p>
+        Professional traders use regime detection: algorithms that analyze market behavior and classify it as ranging, trending, breakout, mean-reversion, etc. Then they switch strategies or parameters based on the regime.
+      </p>
+
+      <p>
+        A simple regime detector can be built with RSI, Bollinger Bands, or trend analysis. The bot can ask: "Is the market trending or ranging right now?" If it's trending, switch strategies. If it's ranging, use the original strategy.
+      </p>
+
+      <p>
+        This isn't about perfect regime detection. It's about the bot being aware of its environment and adapting. A bot that doesn't do this will eventually run into a regime where its parameters don't work. And when that happens, the bot doesn't know why — it just loses money.
+      </p>
+
+      <h2>Rate Limits and API Resilience</h2>
+
+      <p>
+        A bot that polls the exchange API every second will hit rate limits. Most exchanges allow 10-100 requests per minute depending on the tier. Once you hit the limit, the API starts returning 429 (Too Many Requests).
+      </p>
+
+      <p>
+        If the bot doesn't handle 429, it crashes or retries badly. The right approach:
+      </p>
+
+      <ul>
+        <li><strong>Exponential backoff:</strong> When you get a 429, wait 1 second, then 2, then 4, then 8. Each failure doubles the wait. Eventually the rate limit window expires and requests go through again.</li>
+        <li><strong>Request budgeting:</strong> Track how many API calls you've made. Slow down before you hit the limit, not after.</li>
+        <li><strong>Webhook instead of polling:</strong> Better exchanges offer WebSocket streams that push prices to you instead of you polling them. This is orders of magnitude more efficient.</li>
+        <li><strong>Failover exchanges:</strong> If one exchange goes down, can you switch to another? Probably not in real-time for trading, but you could pause and alert you.</li>
+      </ul>
+
+      <p>
+        Rate limits are a feature, not a bug. They're the exchange protecting their infrastructure. A bot that respects them is better than one that tries to hammer the API.
+      </p>
+
+      <h2>Observability: The Debugging Tool You Need</h2>
+
+      <p>
+        When something goes wrong, you need to know what happened. This requires logging and metrics.
+      </p>
+
+      <p>
+        At minimum, log:
+      </p>
+
+      <ul>
+        <li>Every trade execution (time, pair, direction, size, price, fees)</li>
+        <li>Every signal fired (time, signal type, trigger values, market conditions)</li>
+        <li>Every API call that fails (time, endpoint, error code, retry count)</li>
+        <li>Every crash or restart (time, reason, last state before crash)</li>
+        <li>Health check results (time, exchange connectivity, portfolio balance, latest prices)</li>
+      </ul>
+
+      <p>
+        Better yet, send these logs to a centralized system (Datadog, ELK, Grafana) so you can search and correlate events. "Show me all trades in the last week where fees exceeded 0.5%" is a useful query.
+      </p>
+
+      <p>
+        Metrics matter more than logs for autonomous systems. Track:
+      </p>
+
+      <ul>
+        <li>Profit factor (gross profit / gross loss)</li>
+        <li>Win rate (wins / total trades)</li>
+        <li>Fee ratio (total fees / gross profit)</li>
+        <li>Trade frequency (trades per day/hour)</li>
+        <li>Largest drawdown (peak to trough decline in portfolio value)</li>
+        <li>Sharpe ratio (return per unit of volatility)</li>
+      </ul>
+
+      <p>
+        If any of these metrics degrade significantly, alert you. A sharp drop in profit factor or a spike in drawdown usually means something changed (regime shift, signal break, exchange issue).
+      </p>
+
+      <h2>Testing in Production (Safely)</h2>
+
+      <p>
+        Most bots run in "live mode" where they execute real trades. But you can't test safely in live mode — every mistake costs money.
+      </p>
+
+      <p>
+        Use dry-run mode: the bot runs all the same logic, calculates trades, logs them, updates a fake portfolio — but never actually executes. This lets you:
+      </p>
+
+      <ul>
+        <li>Test new parameters safely</li>
+        <li>Verify the bot logic works correctly</li>
+        <li>Check how it would have performed on recent data</li>
+        <li>Debug issues without losing money</li>
+      </ul>
+
+      <p>
+        Start new bot versions in dry-run mode. Run them for a few days. Only switch to live mode once you're confident.
+      </p>
+
+      <p>
+        Better yet: run A/B testing. Run the old bot in live mode on 50% of capital, new bot in live mode on the other 50%. Compare results after a week. This gives you real-world performance data, not backtest fiction.
+      </p>
+
+      <h2>The Watchdog Pattern</h2>
+
+      <p>
+        Here's a simple pattern that works: a watchdog process.
+      </p>
+
+      <p>
+        Your bot writes a "heartbeat" file every minute: a timestamp and its current state (portfolio balance, latest price, open positions). A separate watchdog process periodically checks this file. If the timestamp is stale (older than 2 minutes), the watchdog knows the bot crashed and restarts it.
+      </p>
+
+      <p>
+        This is incredibly simple but surprisingly effective. The bot can crash catastrophically, the watchdog restarts it, and the bot reads its last heartbeat to resume from where it left off.
+      </p>
+
+      <p>
+        You can extend this:
+      </p>
+
+      <ul>
+        <li>If the bot restarts more than 5 times in an hour, the watchdog pauses trading (something is seriously wrong)</li>
+        <li>If the portfolio value drops below a threshold, the watchdog pauses trading (risk control)</li>
+        <li>If the latest heartbeat shows an error state, the watchdog notifies you before restarting</li>
+      </ul>
+
+      <h2>The Meta-Level Problem</h2>
+
+      <p>
+        Here's the thing about autonomous systems (trading bots, AI agents, infrastructure automation): they all share the same failure modes.
+      </p>
+
+      <p>
+        They crash silently. They get into loops. They optimize for the wrong metric and drift over time. They hit rate limits. They fail gracefully on small problems and catastrophically on big ones. They have observability blind spots so you don't realize something's wrong until it's too late.
+      </p>
+
+      <p>
+        The solution isn't to write smarter bots. It's to build infrastructure around the bot that makes failure visible and recovery automatic.
+      </p>
+
+      <ul>
+        <li>Persistent state so you can recover from crashes</li>
+        <li>Health checks so you know when something's wrong</li>
+        <li>Watchdog processes so recovery is automatic</li>
+        <li>Metrics and logging so you can debug and learn</li>
+        <li>Rate limiting and backoff so you don't break external systems</li>
+        <li>Regime detection so the bot adapts to changing conditions</li>
+        <li>Dry-run mode so you can test safely</li>
+      </ul>
+
+      <p>
+        This is why platforms like OpenClaw exist. They take these concerns seriously as first-class features, not bolt-on afterthoughts. An agent that runs on OpenClaw gets persistent memory, health checks, observability, scheduling, and error recovery out of the box.
+      </p>
+
+      <p>
+        A trading bot is a simple case study, but the principles apply to any autonomous system running in production. Build for failure. Instrument for visibility. Automate recovery. Then, and only then, let your bot run unattended.
+      </p>
+
+    </article>
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+      <p>feynman · AI · Cloud Native · Kubernetes · OpenClaw</p>
+    </div>
+  </footer>
+
+</body>
+</html>
