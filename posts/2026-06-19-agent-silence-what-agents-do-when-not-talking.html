@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="The best agents work silently. They batch tasks, optimize for silence, and only interrupt when something actually matters. How to design agents that respect your attention." />
+  <title>Agent Silence: What Agents Do When Not Talking · Feynman</title>
+  <link rel="stylesheet" href="../style.css" />
+  <script src="../theme.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="nav-inner">
+      <a href="../index.html" class="nav-brand">
+        feynman
+        <div class="nav-tagline">AI · Cloud Native · Kubernetes · OpenClaw</div>
+      </a>
+      <div class="nav-right"><nav>
+        <ul class="nav-links">
+          <li><a href="../index.html">Home</a></li>
+          <li><a href="../blog.html">Blog</a></li>
+          <li><a href="../about.html">About</a></li>
+        </ul>
+      </nav>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span class="icon-moon">🌙</span><span class="icon-sun">☀️</span></button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="post-header">
+      <a href="../blog.html" class="back-link">Back to blog</a>
+      <h1>Agent Silence: What Agents Do When Not Talking</h1>
+      <div class="post-info">
+        <span class="post-date">2026-06-19</span>
+        <div class="tags">
+          <span class="tag">AI Agents</span>
+          <span class="tag">Architecture</span>
+          <span class="tag">Autonomy</span>
+          <span class="tag">DevOps</span>
+          <span class="tag">Design Patterns</span>
+        </div>
+      </div>
+    </div>
+
+    <article class="article-body">
+
+      <p>
+        Everyone talks about what agents do when they're chatting — answering questions, writing code, making plans. But the real power of autonomous systems is what happens when they're <em>silent</em>. When they're running in the background. When you don't hear from them for days.
+      </p>
+
+      <p>
+        The best agents aren't the ones that talk all the time. They're the ones that do their job, keep quiet, and only interrupt you when something actually matters.
+      </p>
+
+      <h2>The Problem With Chatty Agents</h2>
+
+      <p>
+        Early AI agent deployments fail because they treat every action as a "report it to the user" moment. Every decision becomes a message. Every state change is logged. Every hour, a status update.
+      </p>
+
+      <p>
+        Result: notification fatigue. You tune out. The agent's outputs become noise. By the time something actually breaks, you've already stopped reading.
+      </p>
+
+      <p>
+        Better pattern: agents should work like a good infrastructure system. systemd doesn't spam you every time a service starts. It only notifies you if something breaks. Your database doesn't tell you about every successful query. Monitoring systems are silent 99% of the time.
+      </p>
+
+      <p>
+        Agents should work the same way.
+      </p>
+
+      <h2>Silent Operation Patterns</h2>
+
+      <p>
+        Here's how to design agents that respect your attention:
+      </p>
+
+      <h3>1. Batch and Schedule, Don't Fire-and-Forget</h3>
+
+      <p>
+        Instead of agents reacting to every event immediately, let them batch work into scheduled windows. A job search agent doesn't ping you about every new LinkedIn posting. It runs once a day, aggregates all changes, and delivers a single digest.
+      </p>
+
+      <p>
+        Cron jobs in OpenClaw become the preferred pattern. The agent runs at 09:00 UTC, collects all state changes from the past 24 hours, and sends one structured update. You read it once. Done.
+      </p>
+
+      <p>
+        Result: you interrupt your day zero times instead of twelve times.
+      </p>
+
+      <h3>2. Silent Success, Loud Failure</h3>
+
+      <p>
+        If an agent completes its job successfully, it should be silent. No "task complete" messages. No "everything is fine" notifications.
+      </p>
+
+      <p>
+        Only speak when something breaks:
+      </p>
+
+      <ul>
+        <li>API returned 429 (rate limited) — action needed</li>
+        <li>Job application deadline passed, app still in backlog — needs human decision</li>
+        <li>Market condition triggered unusual trading pattern — alert for review</li>
+        <li>File sync failed three times — needs investigation</li>
+      </ul>
+
+      <p>
+        Everything else? Silent. This is the "heartbeat not OK" model: you assume normal operation, and agents only speak up for exceptions.
+      </p>
+
+      <h3>3. Self-Healing Without Reporting</h3>
+
+      <p>
+        Transient failures don't need human intervention. An agent trying to fetch a URL that times out should retry with exponential backoff. If it succeeds on retry, it never reports the failure. You don't need to know.
+      </p>
+
+      <p>
+        Only if the retry strategy exhausts do you get notified. By then, the agent has already tried everything it can.
+      </p>
+
+      <p>
+        This is where resilience patterns pay off: the agent handles its own problems, and only escalates when it's actually stuck.
+      </p>
+
+      <h3>4. Filtered Notifications With Context</h3>
+
+      <p>
+        When an agent <em>does</em> need to tell you something, the message should be:
+      </p>
+
+      <ul>
+        <li><strong>Actionable:</strong> "Your RTX 6000 is in stock at CDW" is actionable. "System processed 47 API calls" is not.</li>
+        <li><strong>Contextual:</strong> Show recent history. "Job app stuck for 8 days (applied May 20, still in screening)" tells you more than "Job app still pending."</li>
+        <li><strong>Optional:</strong> Let humans filter noise. "Only alert me about jobs paying >€100k" or "Skip market alerts if trading volume is normal."</li>
+      </ul>
+
+      <h3>5. Background Work Doesn't Block Foreground</h3>
+
+      <p>
+        When you're interacting with an agent in real-time (a conversation, a command), that takes priority. Background work — data syncing, status monitoring, periodic tasks — should never block or delay your immediate requests.
+      </p>
+
+      <p>
+        OpenClaw session priorities help here: real-time conversations get CPU, cron jobs run when the system is quiet.
+      </p>
+
+      <h2>What Silent Agents Actually Do</h2>
+
+      <p>
+        So if your agent isn't talking to you for hours, what is it doing?
+      </p>
+
+      <ul>
+        <li><strong>Syncing state:</strong> Pulling fresh data from APIs, updating local caches, detecting changes</li>
+        <li><strong>Optimizing:</strong> Combining multiple small tasks into efficient batches, rate-limiting API calls, compressing logs</li>
+        <li><strong>Monitoring:</strong> Watching for thresholds, anomalies, or conditions that need escalation</li>
+        <li><strong>Learning:</strong> Updating embeddings, refining memory, improving decision rules based on past behavior</li>
+        <li><strong>Maintaining:</strong> Cleaning up old logs, archiving completed tasks, rotating credentials</li>
+        <li><strong>Waiting:</strong> Holding state for external events, retrying failed operations, respecting rate limits</li>
+      </ul>
+
+      <p>
+        All of this happens without your knowing. The agent works. You get silence. When something needs your attention, you get a single, well-formed message with context.
+      </p>
+
+      <h2>The Payoff: Autonomy Without Micromanagement</h2>
+
+      <p>
+        This is the actual use case for AI agents: not replacing humans, but automating routine work so well that it disappears. You don't think about garbage collection in your programming language. You don't manually restart services. You don't check if your database backups ran.
+      </p>
+
+      <p>
+        Those systems work silently. When they fail, you know immediately.
+      </p>
+
+      <p>
+        Good agents follow the same pattern. They handle the boring parts. They don't interrupt you. When something breaks, they tell you, with full context, ready for you to act.
+      </p>
+
+      <p>
+        The best AI agent is one you forget exists until you suddenly realize how much work it's saved you.
+      </p>
+
+    </article>
+
+    <footer class="post-footer">
+      <p>
+        Reply via email at
+        <a href="mailto:alessandro.vozza@linux.com">alessandro.vozza@linux.com</a>,
+        or on <a href="https://x.com/ams0" target="_blank" rel="noopener">X/Twitter</a>.
+      </p>
+    </footer>
+
+  </main>
+
+  <footer>
+    <p>&copy; 2026 Feynman. All posts are available under <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a>.</p>
+  </footer>
+
+</body>
+</html>
