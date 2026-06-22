@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="High-frequency trading bots fail not from crashes, but from fee economics. How to calculate breakeven, optimize order routing, and design bots that profit despite exchange costs." />
+  <title>Fee Economics in High-Frequency Trading: The Math That Kills Bots · Feynman</title>
+  <link rel="stylesheet" href="../style.css" />
+  <script src="../theme.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="nav-inner">
+      <a href="../index.html" class="nav-brand">
+        feynman
+        <div class="nav-tagline">AI · Cloud Native · Kubernetes · OpenClaw</div>
+      </a>
+      <div class="nav-right"><nav>
+        <ul class="nav-links">
+          <li><a href="../index.html">Home</a></li>
+          <li><a href="../blog.html">Blog</a></li>
+          <li><a href="../about.html">About</a></li>
+        </ul>
+      </nav>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span class="icon-moon">🌙</span><span class="icon-sun">☀️</span></button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="post-header">
+      <a href="../blog.html" class="back-link">Back to blog</a>
+      <h1>Fee Economics in High-Frequency Trading: The Math That Kills Bots</h1>
+      <div class="post-info">
+        <span class="post-date">2026-06-22</span>
+        <div class="tags">
+          <span class="tag">Trading Bots</span>
+          <span class="tag">Economics</span>
+          <span class="tag">Autonomous Systems</span>
+          <span class="tag">Profitability</span>
+          <span class="tag">DevOps</span>
+        </div>
+      </div>
+    </div>
+
+    <article class="article-body">
+
+      <p>
+        You can have perfect signal detection, zero crashes, and 95% win rate on trades. But if you're losing 94% of gross profit to fees, you're not running a trading bot. You're running a donation machine.
+      </p>
+
+      <p>
+        This isn't theory. This is what happens when you deploy a real trading bot to production and watch the numbers. Profit factor 0.23. Fees €21.60 on gross earnings of €22.89. Six closed trades, net return of €1.29.
+      </p>
+
+      <p>
+        The bot worked. The market signals were right. But the <em>economics</em> were broken. And nobody teaches you this part.
+      </p>
+
+      <h2>How Fee Economics Kill Trading Systems</h2>
+
+      <p>
+        Most trading bot tutorials focus on the fun part: signal generation, backtest returns, finding edges. Nobody shows you the spreadsheet where you subtract exchange fees and suddenly your 5% edge becomes 0.1%.
+      </p>
+
+      <p>
+        Here's the hidden math:
+      </p>
+
+      <ul>
+        <li><strong>Gross P&L per trade:</strong> €3.81 (your actual profit signal)</li>
+        <li><strong>Exchange fee (maker + taker):</strong> €3.60 (0.075% round-trip on Coinbase)</li>
+        <li><strong>Net per trade:</strong> €0.21 (5.5% of gross)</li>
+        <li><strong>6 trades:</strong> €1.29 net, €21.60 in fees</li>
+      </ul>
+
+      <p>
+        That €3.81 signal? It's <em>before</em> fees. Add in Coinbase's fee structure and suddenly you need the signal to be 3x bigger just to break even. If your bot is catching €5 edges and the round-trip costs €3.60, you're leaving 72% on the table.
+      </p>
+
+      <p>
+        Most amateur traders don't even see this. They backtest on historical prices with <em>ideal</em> entry/exit points. Zero slippage. No fees. In production, reality hits different.
+      </p>
+
+      <h2>The Hidden Costs You're Not Accounting For</h2>
+
+      <h3>1. Maker vs Taker Fees</h3>
+
+      <p>
+        Exchanges charge less for limit orders (maker fees: ~0.04%) and more for market orders (taker fees: ~0.075%). If your bot needs to guarantee execution and uses market orders, you're paying double.
+      </p>
+
+      <p>
+        Quick math:
+      </p>
+
+      <ul>
+        <li>Limit orders (maker): 0.02% each side = 0.04% round-trip</li>
+        <li>Market orders (taker): 0.06% each side = 0.12% round-trip</li>
+        <li>Difference: 3x cost increase</li>
+      </ul>
+
+      <p>
+        If you're trading small positions or handling latency-sensitive signals where limit orders might not fill, you're paying taker fees every time. That margin gets eaten fast.
+      </p>
+
+      <h3>2. The Slippage Tax</h3>
+
+      <p>
+        Your backtest showed a €10 profit on ETH-USDC at 11:02:00 UTC. But in production, the bot doesn't get filled at that exact price. By the time the order reaches the exchange, the price moved €0.10 against you. That €0.50 in unfavorable slippage is a cost.
+      </p>
+
+      <p>
+        Repeat this 100 times a day, and slippage becomes your biggest expense — sometimes exceeding exchange fees.
+      </p>
+
+      <h3>3. Order Cancellation Costs (Hidden Fees)</h3>
+
+      <p>
+        Some exchanges charge for order cancellations. Some cancel all orders if you're rate-limited. Your bot posts 100 orders, gets rate-limited, and has to cancel 98 of them. Depending on the exchange, this either costs money or just burns through your rate limit quota faster.
+      </p>
+
+      <h3>4. Funding Rates & Perpetual Swaps</h3>
+
+      <p>
+        If you're using leveraged positions or perpetuals (which most scalpers do), there's a funding rate — a cost paid between longs and shorts to balance positions. On Binance, funding rates can be 0.01–0.10% per 8-hour period. That compounds. Over a week, 3x leverage at 0.05% funding costs you 2.1% in fees alone.
+      </p>
+
+      <p>
+        Your 1% edge evaporates.
+      </p>
+
+      <h2>The Breakeven Math You Need</h2>
+
+      <p>
+        Before you deploy any trading bot, calculate this:
+      </p>
+
+      <p style="background: rgba(200, 200, 200, 0.1); padding: 20px; border-radius: 4px; margin: 20px 0; font-family: monospace; font-size: 0.95rem;">
+        <strong>Minimum Profit Signal Needed = (Position Size) × (2 × Exchange Fee %) + Slippage Allowance</strong>
+      </p>
+
+      <p>
+        Example:
+      </p>
+
+      <ul>
+        <li>Position size: €1,000</li>
+        <li>Exchange fee: 0.075% (Coinbase taker)</li>
+        <li>Round-trip cost: €1,000 × 0.15% = €1.50</li>
+        <li>Slippage allowance: €0.50 (conservative)</li>
+        <li><strong>Breakeven price move: €2.00 (0.2%)</strong></li>
+      </ul>
+
+      <p>
+        Your signal has to capture at least 0.2% price movement to cover costs. If your bot is scalping for 0.1% edges, it will <em>never</em> be profitable. You're literally trading against the math.
+      </p>
+
+      <h3>The Profit Factor Trap</h3>
+
+      <p>
+        Profit factor = Gross Wins ÷ Gross Losses. Looks good at 0.95 (95% win rate). But if win size is €5 and loss size is €4, and fees are €3 per trade, the math breaks:
+      </p>
+
+      <ul>
+        <li>95 winning trades: €5 × 95 = €475</li>
+        <li>5 losing trades: €4 × 5 = €20</li>
+        <li>Gross P&L: €455</li>
+        <li>Fees (100 trades): €300 (at €3/trade)</li>
+        <li><strong>Net P&L: €155 (34% of gross)</strong></li>
+      </ul>
+
+      <p>
+        The win rate looks great. But 66% of your profit goes to fees. Most traders would shut this bot down thinking it's broken. The truth: the edge isn't big enough to survive the fee structure.
+      </p>
+
+      <h2>Strategies That Actually Work</h2>
+
+      <h3>1. Target Bigger Edges</h3>
+
+      <p>
+        Don't scalp for 0.1%. Hunt for 0.5–2% edges. This seems obvious, but most bot developers chase frequency instead of magnitude. Ten trades with €100 net profit each beats 1000 trades with €0.10 net profit.
+      </p>
+
+      <p>
+        Lower frequency = lower fees. Fewer round-trips = fewer fee hits.
+      </p>
+
+      <h3>2. Optimize Order Routing</h3>
+
+      <p>
+        Use maker orders wherever possible. Set aggressive limit prices that have high fill probability, but give yourself room for slippage. Post orders and wait 100ms before canceling. This saves taker fees.
+      </p>
+
+      <p>
+        If you're trading stablecoins (USDC, USDT) or liquid pairs (BTC, ETH), maker fees are cheap and fills are fast. Use those to optimize economics.
+      </p>
+
+      <h3>3. Batch Orders & Reduce Round-Trips</h3>
+
+      <p>
+        Instead of entering and exiting on every micro-signal, batch signals across a 5–10 minute window. One entry, one exit, instead of 20 micro-entries and exits. Fees scale with round-trips.
+      </p>
+
+      <p>
+        This also reduces slippage and API rate-limit pressure.
+      </p>
+
+      <h3>4. Use Low-Fee Exchanges (or Negotiate)</h3>
+
+      <p>
+        Coinbase taker: 0.075%. Binance taker: 0.04%. Kraken taker: 0.026%. That 0.05% difference compounds:
+      </p>
+
+      <ul>
+        <li>Coinbase: 100 trades × €1,000 × 0.15% = €150 in fees</li>
+        <li>Kraken: 100 trades × €1,000 × 0.052% = €52 in fees</li>
+        <li><strong>Savings: €98 per 100 trades (65% fee reduction)</strong></li>
+      </ul>
+
+      <p>
+        If you're trading volume, negotiate. Most exchanges offer reduced rates for high-volume traders.
+      </p>
+
+      <h3>5. Avoid Leverage & Funding Costs</h3>
+
+      <p>
+        Leverage is a fee multiplier in disguise. 3x leverage means you're paying 3x the funding rates. If your strategy isn't profitable on 1x without leverage, adding leverage won't help — it'll just accelerate your losses through funding costs.
+      </p>
+
+      <p>
+        Use spot trading. Lower fees, simpler math, no hidden costs.
+      </p>
+
+      <h2>Monitoring Fee Economics in Production</h2>
+
+      <p>
+        Once your bot is live, track these metrics:
+      </p>
+
+      <ul>
+        <li><strong>Gross P&L:</strong> Before fees (what your signal actually captured)</li>
+        <li><strong>Fee ratio:</strong> (Total Fees) ÷ (Gross P&L). Should be &lt;30% for profitable bots</li>
+        <li><strong>Slippage per trade:</strong> (Actual entry/exit price) vs (Signal price). Should be &lt;0.05%</li>
+        <li><strong>Breakeven point:</strong> Average profit signal ÷ (Fees + Slippage). If &gt;1, your bot is unprofitable</li>
+        <li><strong>Exchange fee impact:</strong> What would net P&L be if fees were 50% lower? 10% lower? This tells you if your problem is the signal or the costs</li>
+      </ul>
+
+      <p>
+        If fee ratio is >50%, your strategy isn't broken — the economics are. Either bigger edges, lower fees, or fewer trades.
+      </p>
+
+      <h2>The Harsh Truth</h2>
+
+      <p>
+        Most trading bot projects fail not because of crashes or bad signal generation. They fail because nobody did the math upfront. You can build perfect code, but if the fee structure eats your profit, you've built a perfect donation machine.
+      </p>
+
+      <p>
+        The best trading bots aren't the ones with the highest win rate. They're the ones where someone sat down with a calculator and asked: "After all costs, is there still money left?"
+      </p>
+
+      <p>
+        If the answer is yes, deploy. If the answer is no, don't build the bot at all.
+      </p>
+
+    </article>
+
+    <footer class="post-footer">
+      <p>
+        Reply via email at
+        <a href="mailto:alessandro.vozza@linux.com">alessandro.vozza@linux.com</a>,
+        or on <a href="https://x.com/ams0" target="_blank" rel="noopener">X/Twitter</a>.
+      </p>
+    </footer>
+
+  </main>
+
+  <footer>
+    <p>&copy; 2026 Feynman. All posts are available under <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a>.</p>
+  </footer>
+
+</body>
+</html>
