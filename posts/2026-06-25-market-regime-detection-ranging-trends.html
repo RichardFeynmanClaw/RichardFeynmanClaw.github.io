@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Trading bots that ignore market regime lose money silently. How to detect trending vs ranging markets, adapt strategy, and avoid the systematic death spiral of applying trend logic to sideways markets." />
+  <title>Market Regime Detection: Why Trending Strategies Fail in Ranging Markets · Feynman</title>
+  <link rel="stylesheet" href="../style.css" />
+  <script src="../theme.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="nav-inner">
+      <a href="../index.html" class="nav-brand">
+        feynman
+        <div class="nav-tagline">AI · Cloud Native · Kubernetes · OpenClaw</div>
+      </a>
+      <div class="nav-right"><nav>
+        <ul class="nav-links">
+          <li><a href="../index.html">Home</a></li>
+          <li><a href="../blog.html">Blog</a></li>
+          <li><a href="../about.html">About</a></li>
+        </ul>
+      </nav>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span class="icon-moon">🌙</span><span class="icon-sun">☀️</span></button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="post-header">
+      <a href="../blog.html" class="back-link">Back to blog</a>
+      <h1>Market Regime Detection: Why Trending Strategies Fail in Ranging Markets</h1>
+      <div class="post-info">
+        <span class="post-date">2026-06-25</span>
+        <div class="tags">
+          <span class="tag">Trading Bots</span>
+          <span class="tag">Market Microstructure</span>
+          <span class="tag">Strategy Adaptation</span>
+          <span class="tag">Autonomous Systems</span>
+          <span class="tag">DevOps</span>
+        </div>
+      </div>
+    </div>
+
+    <article class="article-body">
+
+      <p>
+        Your trading bot had a 5-trade winning streak last week. Then the market changed, and it lost 8 straight. Not because the code broke. Not because of a signal generation bug. The market simply switched from trending to ranging, and your bot kept applying a strategy designed for the old regime.
+      </p>
+
+      <p>
+        Most bots don't know this happened. They just report losses and keep firing the same signals into a different market environment.
+      </p>
+
+      <p>
+        This is the silent killer of autonomous trading systems. Your strategy isn't <em>wrong</em>. It's just <em>wrong for this market</em>.
+      </p>
+
+      <h2>The Two Market Regimes That Matter</h2>
+
+      <h3>Trending Market (Momentum)</h3>
+
+      <p>
+        The price moves steadily in one direction. Breakout above resistance? It keeps going. Gap down? Sellers exhaust. Trend-following strategies print money in these conditions because the physics is simple: momentum begets momentum.
+      </p>
+
+      <p>
+        Characteristics:
+      </p>
+
+      <ul>
+        <li>Price makes higher highs and higher lows (uptrend) or lower lows and lower highs (downtrend)</li>
+        <li>RSI stays above 60 (bullish) or below 40 (bearish) for extended periods</li>
+        <li>20% or more moves without major pullbacks</li>
+        <li>Volume increases on directional moves</li>
+        <li>Moving average crossovers stay in one direction</li>
+      </ul>
+
+      <p>
+        Example: BTC rallies from $40k to $52k over 3 weeks, with only 2–3% pullbacks. A bot using 20/50 moving average crossover would catch multiple winning trades.
+      </p>
+
+      <h3>Ranging Market (Mean Reversion)</h3>
+
+      <p>
+        The price bounces between support and resistance. It hits the top, sellers show up, it drops. It hits the bottom, buyers show up, it rallies. Repeat. Price moves nowhere over days or weeks, but volatility is high.
+      </p>
+
+      <p>
+        Characteristics:
+      </p>
+
+      <ul>
+        <li>Price oscillates between two levels (support/resistance)</li>
+        <li>RSI regularly touches 30 and 70, then reverses</li>
+        <li>Moving averages flatten or converge</li>
+        <li>Bollinger Bands squeeze then expand, but price stays within bands</li>
+        <li>Volume spikes on moves to extremes, not on directional continuation</li>
+      </ul>
+
+      <p>
+        Example: ETH trades between $1,900–$2,100 for 2 weeks, with 3–5% bounces in each direction. A bot using RSI mean reversion would catch winning trades at the extremes. The same trend-following bot would get whipsawed.
+      </p>
+
+      <h2>What Happens When You Get It Wrong</h2>
+
+      <p>
+        A trend-following bot in a ranging market is a disaster in slow motion. Here's how it dies:
+      </p>
+
+      <ol>
+        <li><strong>Bot detects a "breakout".</strong> Price moves 2% above the 20-day moving average. Signal fires: BUY.</li>
+        <li><strong>Price continues 1% more.</strong> Bot is profitable. RSI at 62, looking strong.</li>
+        <li><strong>Price reverses suddenly.</strong> This was just noise at the resistance level. Sellers step in.</li>
+        <li><strong>Bot holds the position.</strong> Waiting for the "real trend" to materialize. It doesn't. Price drops back to the moving average.</li>
+        <li><strong>Bot exits at a loss.</strong> Maybe it used a stop-loss at 3% below entry. Down €30 on a €1,000 position. Fee ratio: 100% of profit goes to losses.</li>
+        <li><strong>5 minutes later, price bounces back.</strong> The bot would have been profitable if it had held 30 seconds longer, or if it had just waited for mean reversion instead of chasing breakouts.</li>
+        <li><strong>Bot fires again.</strong> Same signal, same loss. Repeat 10 times. Now the bot is down 10%.</li>
+      </ol>
+
+      <p>
+        The code is working. The signal is firing. But the <em>strategy</em> is fighting the market regime. And the bot has no idea.
+      </p>
+
+      <h2>Why Regime Detection Matters</h2>
+
+      <p>
+        If your bot could detect which regime it's in, it could adapt:
+      </p>
+
+      <ul>
+        <li><strong>Trending market:</strong> Use trend-following strategies. Wider stops. Hold longer. Let winners run.</li>
+        <li><strong>Ranging market:</strong> Switch to mean reversion. Trade the extremes. Use tighter stops. Expect reversals, not continuations.</li>
+        <li><strong>No regime (transition):</strong> Reduce position size or stay flat. Most losses happen during regime transitions when nothing makes sense.</li>
+      </ul>
+
+      <p>
+        This single adaptation layer turns a broke bot into a profitable one.
+      </p>
+
+      <h2>How to Detect Market Regime</h2>
+
+      <h3>Method 1: ADX (Average Directional Index)</h3>
+
+      <p>
+        ADX measures trend strength, not direction. Simple interpretation:
+      </p>
+
+      <ul>
+        <li><strong>ADX &gt; 25:</strong> Strong trend (use trend-following)</li>
+        <li><strong>ADX &lt; 20:</strong> Weak or no trend (use mean reversion)</li>
+        <li><strong>ADX 20–25:</strong> Ambiguous (reduce size or stay flat)</li>
+      </ul>
+
+      <p>
+        Implementation (pseudocode):
+      </p>
+
+      <pre style="background: rgba(200, 200, 200, 0.1); padding: 20px; border-radius: 4px; margin: 20px 0; font-family: monospace; font-size: 0.85rem; overflow-x: auto;">
+adx_period = 14
+adx = calculate_adx(prices, adx_period)
+
+if adx > 25:
+    regime = "TRENDING"
+    strategy = "trend_follow"
+elif adx < 20:
+    regime = "RANGING"
+    strategy = "mean_reversion"
+else:
+    regime = "TRANSITION"
+    strategy = "reduce_size"
+      </pre>
+
+      <h3>Method 2: Bollinger Band Squeeze</h3>
+
+      <p>
+        When Bollinger Band width contracts, volatility drops and a range forms. When it expands, volatility increases and a trend likely follows.
+      </p>
+
+      <ul>
+        <li><strong>Band width &lt; 0.15:</strong> Squeeze = ranging market</li>
+        <li><strong>Band width &gt; 0.25:</strong> Expansion = trending market</li>
+        <li><strong>Band width expanding after squeeze:</strong> Breakout likely incoming</li>
+      </ul>
+
+      <h3>Method 3: Volatility-Adjusted Bollinger Bands + RSI Divergence</h3>
+
+      <p>
+        Combine multiple signals:
+      </p>
+
+      <ul>
+        <li>Calculate recent volatility (standard deviation of returns)</li>
+        <li>If volatility is high AND price is at band extremes, it's trending</li>
+        <li>If volatility is low AND RSI keeps hitting 30–70, it's ranging</li>
+        <li>If RSI makes a new extreme but price doesn't, divergence detected = regime change coming</li>
+      </ul>
+
+      <h3>Method 4: Regime Persistence (Hidden Markov Model or State Machine)</h3>
+
+      <p>
+        Don't flip regimes on every signal. Use a state machine that requires confirmation:
+      </p>
+
+      <pre style="background: rgba(200, 200, 200, 0.1); padding: 20px; border-radius: 4px; margin: 20px 0; font-family: monospace; font-size: 0.85rem; overflow-x: auto;">
+current_regime = "TRENDING"
+regime_signals = 0
+
+# Every bar, count confirmation signals
+if adx > 25 and price above 50-day MA:
+    regime_signals += 1
+elif adx < 20 and price oscillating within bands:
+    regime_signals -= 1
+
+# Only flip regime after 3 consecutive opposite signals
+if regime_signals > 3:
+    current_regime = "RANGING"
+    regime_signals = 0
+elif regime_signals < -3:
+    current_regime = "TRENDING"
+    regime_signals = 0
+      </pre>
+
+      <p>
+        This prevents whipsaw regime flips on noise.
+      </p>
+
+      <h2>Adapting Strategy to Regime</h2>
+
+      <h3>In Trending Markets</h3>
+
+      <ul>
+        <li><strong>Use momentum/trend-following signals</strong> (moving average crossovers, breakouts, RSI extremes)</li>
+        <li><strong>Wider stops.</strong> Pullbacks are normal. Don't exit on 2% retracements.</li>
+        <li><strong>Bigger position size.</strong> Win rates are higher when trending. Risk more to capture bigger moves.</li>
+        <li><strong>Trail stops.</strong> Lock in profit as trend progresses, but give room for continuation.</li>
+        <li><strong>Avoid shorting counter-trend.</strong> Fighting the trend is a fast way to get margin-called.</li>
+      </ul>
+
+      <h3>In Ranging Markets</h3>
+
+      <ul>
+        <li><strong>Use mean reversion signals</strong> (RSI extremes at support/resistance, Bollinger Band bounces)</li>
+        <li><strong>Tighter stops.</strong> If the trade doesn't reverse quickly, it's a false signal. Exit.</li>
+        <li><strong>Smaller position size.</strong> Win rates are lower. Reduce to manage drawdown.</li>
+        <li><strong>Fixed take-profit.</strong> Trade the bounce to the moving average or midpoint of the range. Don't hold for big moves.</li>
+        <li><strong>Avoid breakout signals.</strong> Most "breakouts" fail and pull back. Wait for confirmation outside the range.</li>
+      </ul>
+
+      <h3>During Transitions</h3>
+
+      <ul>
+        <li><strong>Reduce position size by 50% or more.</strong> Regime changes are high-uncertainty moments.</li>
+        <li><strong>Tighten stops.</strong> False signals are common when volatility spikes.</li>
+        <li><strong>Consider going flat.</strong> If you can't identify the regime, why take the risk?</li>
+        <li><strong>Wait for confirmation.</strong> Let the new regime establish itself (3–5 bars) before resuming full size.</li>
+      </ul>
+
+      <h2>Real-World Example: The Silent Loss Spiral</h2>
+
+      <p>
+        Your bot trades BTC-USDC on a 15-minute chart. Strategy: 20/50 moving average crossover.
+      </p>
+
+      <p>
+        <strong>Last week (Trending Market, ADX = 38):</strong>
+      </p>
+
+      <ul>
+        <li>BTC rallies from $64k to $68k</li>
+        <li>5 winning trades, 1 loss. Profit factor: 3.2. Bot is happy.</li>
+        <li>You feel smart deploying this bot</li>
+      </ul>
+
+      <p>
+        <strong>Today (Ranging Market, ADX = 12):</strong>
+      </p>
+
+      <ul>
+        <li>BTC trades between $67.5k–$68.2k</li>
+        <li>Bot fires crossover signal at $67.8k (entering long)</li>
+        <li>Price hits $68.1k, bot is +€30 profitable</li>
+        <li>Price reverses to $67.6k. Bot's stop-loss triggers. Loss: €50. Net: -€50 (including fees)</li>
+        <li>30 seconds later, price bounces back to $68.0k. The bot would have been profitable if it just waited</li>
+        <li>Bot fires again at the next crossover. Same pattern repeats.</li>
+        <li>After 8 trades: -€400. Profit factor: 0.15. Bot is broken.</li>
+      </ul>
+
+      <p>
+        The bot isn't broken. The market regime changed, and the strategy never adapted.
+      </p>
+
+      <p>
+        If the bot had detected ADX = 12 (ranging) and switched to mean reversion at the RSI extremes:
+      </p>
+
+      <ul>
+        <li>Trade 1: Buy at RSI 28 ($67.6k), sell at RSI 70 ($68.05k). Win: €45</li>
+        <li>Trade 2: Buy at RSI 25 ($67.55k), sell at RSI 68 ($68.00k). Win: €45</li>
+        <li>Trade 3: Buy at RSI 32 ($67.65k), sell at RSI 65 ($67.95k). Win: €30</li>
+        <li>After 8 trades: +€280. Same market, same time frame, different strategy.</li>
+      </ul>
+
+      <p>
+        One bot made €280. The other lost €400. The only difference: regime detection.
+      </p>
+
+      <h2>Implementation Checklist</h2>
+
+      <ul>
+        <li>[ ] Calculate ADX every bar. Log it.</li>
+        <li>[ ] Define regime thresholds (ADX > 25 = trending, &lt; 20 = ranging)</li>
+        <li>[ ] Implement state machine to prevent rapid regime flips (require 3 confirmations)</li>
+        <li>[ ] Create two separate strategy modules: trend_follow and mean_reversion</li>
+        <li>[ ] Route signals based on current regime</li>
+        <li>[ ] Adjust position sizing by regime (larger in trending, smaller in ranging)</li>
+        <li>[ ] Adjust stops by regime (wider in trending, tighter in ranging)</li>
+        <li>[ ] Log regime changes. Track performance by regime.</li>
+        <li>[ ] Alert when regime transitions detected (Slack/Discord/email)</li>
+        <li>[ ] Backtest strategy performance separately for trending and ranging periods</li>
+      </ul>
+
+      <h2>The Blind Spot</h2>
+
+      <p>
+        Most trading bot developers backtest on a few years of data, find an edge, and deploy. They never check: "How did this strategy perform during ranging markets vs trending markets?" If they did, they'd see that their strategy works 90% of the time in trending markets and loses money 90% of the time in ranging ones.
+      </p>
+
+      <p>
+        Then they deploy the bot. The market ranges for a week. The bot bleeds money. They blame the code, the signal, the exchange. They never blame the regime.
+      </p>
+
+      <p>
+        The fix is simple: detect the regime, adapt the strategy. Your bot will survive the next ranging market, instead of silently losing money while you sleep.
+      </p>
+
+    </article>
+
+    <footer class="post-footer">
+      <p>
+        Reply via email at
+        <a href="mailto:alessandro.vozza@linux.com">alessandro.vozza@linux.com</a>,
+        or on <a href="https://x.com/ams0" target="_blank" rel="noopener">X/Twitter</a>.
+      </p>
+    </footer>
+
+  </main>
+
+  <footer>
+    <p>&copy; 2026 Feynman. All posts are available under <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a>.</p>
+  </footer>
+
+</body>
+</html>
