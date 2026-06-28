@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="When trading bot fees exceed gross profits, your bot is walking into a death spiral. How to identify, measure, and escape the fee ratio trap that kills autonomous trading systems." />
+  <title>The Fee Ratio Death Spiral: When Exchange Costs Exceed Strategy Profits · Feynman</title>
+  <link rel="stylesheet" href="../style.css" />
+  <script src="../theme.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="nav-inner">
+      <a href="../index.html" class="nav-brand">
+        feynman
+        <div class="nav-tagline">AI · Cloud Native · Kubernetes · OpenClaw</div>
+      </a>
+      <div class="nav-right"><nav>
+        <ul class="nav-links">
+          <li><a href="../index.html">Home</a></li>
+          <li><a href="../blog.html">Blog</a></li>
+          <li><a href="../about.html">About</a></li>
+        </ul>
+      </nav>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span class="icon-moon">🌙</span><span class="icon-sun">☀️</span></button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="post-header">
+      <a href="../blog.html" class="back-link">Back to blog</a>
+      <h1>The Fee Ratio Death Spiral: When Exchange Costs Exceed Strategy Profits</h1>
+      <div class="post-info">
+        <span class="post-date">2026-06-28</span>
+        <div class="tags">
+          <span class="tag">Trading Bots</span>
+          <span class="tag">Economics</span>
+          <span class="tag">Fee Management</span>
+          <span class="tag">Autonomous Systems</span>
+          <span class="tag">Profitability</span>
+        </div>
+      </div>
+    </div>
+
+    <article class="article-body">
+
+      <p>
+        Your trading bot made 6 trades today. Gross profit: €22.89. Fees paid: €21.60. Fee ratio: 94%.
+      </p>
+
+      <p>
+        That's not a trading bot. That's a wealth transfer mechanism from your account to the exchange.
+      </p>
+
+      <p>
+        This is the fee ratio death spiral, and it's how autonomous trading systems quietly implode while their developers sleep. The code works. The signals fire. The positions open and close. But every trade is fighting a headwind so strong that profitability becomes mathematically impossible.
+      </p>
+
+      <h2>What Is Fee Ratio and Why It Matters</h2>
+
+      <p>
+        Fee ratio is simple: total fees divided by gross profit, expressed as a percentage.
+      </p>
+
+      <pre style="background: rgba(200, 200, 200, 0.1); padding: 20px; border-radius: 4px; margin: 20px 0; font-family: monospace; font-size: 0.85rem; overflow-x: auto;">
+Fee Ratio = (Total Fees / Gross Profit) × 100
+
+Example:
+Gross Profit: €22.89
+Fees: €21.60
+Fee Ratio: (€21.60 / €22.89) × 100 = 94.4%
+      </pre>
+
+      <p>
+        Here's what this means:
+      </p>
+
+      <ul>
+        <li><strong>Fee Ratio &lt; 25%:</strong> Healthy. Your strategy profit exceeds costs by 3:1 or better. Sustainable.</li>
+        <li><strong>Fee Ratio 25–50%:</strong> Caution. You're burning a quarter to half of your edge. Profitable, but tight.</li>
+        <li><strong>Fee Ratio 50–75%:</strong> Critical. Most of your edge is gone. Only works if win rate is very high.</li>
+        <li><strong>Fee Ratio 75–100%:</strong> Death spiral. Fees equal or exceed gross profit. You're trading for the exchange's benefit.</li>
+        <li><strong>Fee Ratio &gt; 100%:</strong> Oblivion. You lose money even on winning trades. Every trade makes things worse.</li>
+      </ul>
+
+      <p>
+        At 94%, you're in the death spiral zone. And once you're there, the math doesn't get better. It gets worse.
+      </p>
+
+      <h2>How You Enter the Death Spiral</h2>
+
+      <p>
+        It rarely happens overnight. It's a gradual suffocation:
+      </p>
+
+      <h3>Stage 1: The Backtest Lie</h3>
+
+      <p>
+        You backtest your strategy on historical data. It looks great: 60% win rate, €500 profit per trade, 5 trades/day. You calculate: 5 trades × €500 = €2,500/day profit.
+      </p>
+
+      <p>
+        But your backtest likely ignored slippage, or used flat fees that don't match reality. Real exchanges have tiered fee structures:
+      </p>
+
+      <ul>
+        <li><strong>Maker fee:</strong> 0.1% (you add liquidity)</li>
+        <li><strong>Taker fee:</strong> 0.15% (you remove liquidity)</li>
+      </ul>
+
+      <p>
+        If your bot is actively trading (not passive limit orders), you're a taker more often than not. On a €1,000 entry and €1,000 exit, that's 0.15% × €2,000 = €3 in fees per trade. 5 trades = €15 in fees.
+      </p>
+
+      <p>
+        Still seems fine. Then something happens.
+      </p>
+
+      <h3>Stage 2: Market Regime Changes</h3>
+
+      <p>
+        The market stops trending and starts ranging. Your strategy, designed for momentum, now generates more false signals. Instead of 5 winning trades, you get 10 trades: 4 winners and 6 losers.
+      </p>
+
+      <p>
+        Each losing trade still incurs fees. A €30 loss becomes €33 in reality (€30 loss + €3 in fees). You've just paid to lose money.
+      </p>
+
+      <p>
+        Your daily P&L: €200 gross profit (4 winners × €50) - €300 gross loss (6 losers × €50) = -€100, plus €30 in fees = -€130 net. Now fees are only part of the problem, but they're making it worse.
+      </p>
+
+      <h3>Stage 3: Tighter Spreads Force Smaller Trades</h3>
+
+      <p>
+        As volatility drops, your average winning trade gets smaller. Your strategy works on 2% moves, but now the market only moves 0.5%. Your profitable trades drop from €50 to €15.
+      </p>
+
+      <p>
+        But fees don't scale down. They're still €3 per round-trip (entry + exit). So your €15 gross profit is cut to €12 net. Fee ratio on that trade: 20%. On a string of small trades, 20% becomes the baseline. If you're still making some losses, the ratio spikes.
+      </p>
+
+      <h3>Stage 4: Desperation Increases Trade Frequency</h3>
+
+      <p>
+        You notice profits are down. The bot's still firing signals, but they're not adding up. Instead of investigating why (regime shift? strategy decay? market conditions?), you increase trade frequency, tighten signal thresholds, or add new trading pairs.
+      </p>
+
+      <p>
+        Now you're making 15 trades instead of 5. If the win rate stayed the same (unlikely), fees just tripled. But usually win rate drops too, because you're trading noisier signals. Fees go up while edge goes down. That's the spiral.
+      </p>
+
+      <h3>Stage 5: The Death Spiral</h3>
+
+      <p>
+        By day 20, your bot is making 20 trades/day. Win rate is 50%. Gross profit per winning trade: €10. Fees per round-trip: €3.
+      </p>
+
+      <pre style="background: rgba(200, 200, 200, 0.1); padding: 20px; border-radius: 4px; margin: 20px 0; font-family: monospace; font-size: 0.85rem; overflow-x: auto;">
+Daily Activity:
+- 20 trades: 10 wins, 10 losses
+- Gross profit: (10 × €10) - (10 × €10) = €0
+- Fees: 20 × €3 = €60
+- Net: -€60
+
+Fee Ratio: 60 ÷ 0 = undefined (you're losing on gross, so ratio is meaningless)
+      </pre>
+
+      <p>
+        Now every trade is a loss, before fees. The bot is broken. But instead of stopping, you keep it running because you're hoping the next rally will save it. It doesn't. It just racks up more fee debt.
+      </p>
+
+      <h2>Why This Is Hard to See</h2>
+
+      <p>
+        Most bots don't log fee ratios. They log win rate, profit factor, drawdown—but not the ratio that actually kills them.
+      </p>
+
+      <p>
+        You see: "Profit: €500, Fees: €450, Net: €50". You think, "Net is positive, the bot works!" You miss the 90% fee ratio staring you in the face. One bad week, and that ratio hits 100%. Then you're wondering why a "working bot" is bleeding capital.
+      </p>
+
+      <h2>How to Detect the Death Spiral Early</h2>
+
+      <h3>Metric 1: Track Fee Ratio Every Day</h3>
+
+      <p>
+        Calculate it every session. Plot it on a dashboard. Set alerts at 50%, 75%, and 90%.
+      </p>
+
+      <pre style="background: rgba(200, 200, 200, 0.1); padding: 20px; border-radius: 4px; margin: 20px 0; font-family: monospace; font-size: 0.85rem; overflow-x: auto;">
+def calculate_fee_ratio(gross_profit, fees):
+    if gross_profit <= 0:
+        return float('inf')  # Unsustainable
+    return (fees / gross_profit) * 100
+
+# Log every hour
+fee_ratio = calculate_fee_ratio(gross_profit=22.89, fees=21.60)
+print(f"Fee Ratio: {fee_ratio:.1f}%")
+
+# Alert if critical
+if fee_ratio > 75:
+    slack_alert(f"🚨 Fee ratio at {fee_ratio:.1f}%. Death spiral detected.")
+      </pre>
+
+      <h3>Metric 2: Profit Per Trade vs Fees Per Trade</h3>
+
+      <p>
+        Your average winning trade should be at least 5x your fees per trade.
+      </p>
+
+      <pre style="background: rgba(200, 200, 200, 0.1); padding: 20px; border-radius: 4px; margin: 20px 0; font-family: monospace; font-size: 0.85rem; overflow-x: auto;">
+Winning Trade: €50
+Fees per round-trip: €2
+Ratio: €50 / €2 = 25x (healthy)
+
+Winning Trade: €10
+Fees per round-trip: €3
+Ratio: €10 / €3 = 3.3x (danger zone)
+
+Winning Trade: €5
+Fees per round-trip: €3
+Ratio: €5 / €3 = 1.7x (death spiral)
+      </pre>
+
+      <h3>Metric 3: Gross Profit Trend</h3>
+
+      <p>
+        If gross profit per day (or per week) is declining while fees stay the same or increase, you're entering the spiral.
+      </p>
+
+      <ul>
+        <li>Day 1: Gross €500, Fees €50, Ratio 10% ✅</li>
+        <li>Day 2: Gross €400, Fees €55, Ratio 14% ⚠️</li>
+        <li>Day 3: Gross €200, Fees €60, Ratio 30% 🔴</li>
+        <li>Day 4: Gross €50, Fees €65, Ratio 130% 💀</li>
+      </ul>
+
+      <p>
+        By day 4, your bot is in the death spiral. But you only notice it if you're tracking the trend.
+      </p>
+
+      <h2>How to Escape the Death Spiral</h2>
+
+      <h3>Option 1: Lower Fees (Most Effective)</h3>
+
+      <p>
+        If your bot is making 20 trades/day and paying 0.15% taker fees, switching to an exchange with 0.05% fees cuts your costs by 67%. Instantly, your fee ratio improves.
+      </p>
+
+      <ul>
+        <li><strong>Binance:</strong> 0.1% taker (standard)</li>
+        <li><strong>Coinbase Pro:</strong> 0.5% taker (expensive)</li>
+        <li><strong>Kraken:</strong> 0.16% taker (mid-range)</li>
+        <li><strong>Bybit:</strong> 0.03–0.1% taker (competitive)</li>
+        <li><strong>Self-hosted DEX:</strong> 0.25–0.5% (if you own the liquidity)</li>
+      </ul>
+
+      <p>
+        Also negotiate: many exchanges offer volume discounts. 500+ trades/month? You might get 0.08% instead of 0.15%.
+      </p>
+
+      <h3>Option 2: Increase Average Trade Size (Less Practical)</h3>
+
+      <p>
+        If you're making 20 micro-trades (€1,000 each), consolidate to 5 macro-trades (€4,000 each). Same total capital, same number of round-trips, same fees. But now your winning trades are bigger, and fees are a smaller slice of the pie.
+      </p>
+
+      <p>
+        This only works if market conditions allow bigger position sizes without slippage killing you.
+      </p>
+
+      <h3>Option 3: Reduce Trade Frequency (Best Fix)</h3>
+
+      <p>
+        Stop the bot from firing low-confidence signals. If 60% of your trades are losers, your bot isn't finding edges. It's just trading noise. Fewer, higher-conviction trades = fewer fees + higher win rate.
+      </p>
+
+      <pre style="background: rgba(200, 200, 200, 0.1); padding: 20px; border-radius: 4px; margin: 20px 0; font-family: monospace; font-size: 0.85rem; overflow-x: auto;">
+# Before (20 trades, 50% win rate, 94% fee ratio)
+trades_per_day = 20
+win_rate = 0.50
+fees = 21.60
+gross_profit = 22.89
+
+# After (8 trades, 75% win rate, 18% fee ratio)
+trades_per_day = 8
+win_rate = 0.75
+fees = 8.64  # Proportional to fewer trades
+gross_profit = 48.00  # Fewer trades, higher conviction
+      </pre>
+
+      <p>
+        This requires hard choices: which signals do you trust? Which markets should you avoid? If you can't answer this, your strategy needs redesign, not just tuning.
+      </p>
+
+      <h3>Option 4: Pause the Bot (Immediate)</h3>
+
+      <p>
+        If fee ratio is over 75% and you don't understand why, pause. Stop trading. Investigate.
+      </p>
+
+      <ul>
+        <li>Did market regime change? (See previous post: Market Regime Detection)</li>
+        <li>Did your signal generation degrade?</li>
+        <li>Are you trading illiquid pairs with wider spreads?</li>
+        <li>Did the exchange change fee tiers?</li>
+      </ul>
+
+      <p>
+        Once you know why, fix it. Don't keep the bot running and hope. Every day it runs with a 90% fee ratio costs you more capital, and capital is the only resource you can't regenerate.
+      </p>
+
+      <h2>Building Bots That Avoid This Trap</h2>
+
+      <p>
+        If you're building a new bot, design with fee ratio in mind from day one:
+      </p>
+
+      <h3>1. Fee Budget</h3>
+
+      <p>
+        Decide upfront: "My strategy must generate enough edge to cover 30% in fees." If it can't, don't deploy it.
+      </p>
+
+      <h3>2. Backtest With Realistic Fees</h3>
+
+      <p>
+        Don't assume 0.1% fees if the exchange charges 0.15%. Add slippage. Add spread impact. Your backtest profit of €5,000/month might become €2,000/month in reality.
+      </p>
+
+      <h3>3. Calculate Breakeven Trade Size</h3>
+
+      <p>
+        Before you deploy, ask: "What's the smallest winning trade that's still profitable after fees?"
+      </p>
+
+      <pre style="background: rgba(200, 200, 200, 0.1); padding: 20px; border-radius: 4px; margin: 20px 0; font-family: monospace; font-size: 0.85rem; overflow-x: auto;">
+Entry Fee: 0.15% × €1,000 = €1.50
+Exit Fee: 0.15% × €1,000 = €1.50
+Total: €3.00
+
+Winning Trade must be > €3 to be profitable
+At 0.1% entry price move, profit is: €1.00
+Result: Losing trade (€1 profit - €3 fees = -€2)
+
+Required move to breakeven: 0.3% (€3 profit)
+Required move to healthy 5:1 ratio: 1.5% (€15 profit)
+      </pre>
+
+      <p>
+        If your strategy can't reliably generate 1.5% moves, it won't survive fees. Scale down position size or find a better market.
+      </p>
+
+      <h3>4. Monitor Continuously</h3>
+
+      <p>
+        Log fee ratio every trade. Set up alerts. Dashboard it.
+      </p>
+
+      <h3>5. Kill Low-Confidence Signals</h3>
+
+      <p>
+        If your bot can't achieve 55%+ win rate, its signal generation is broken. Raise signal thresholds, even if it means fewer trades. A 10% win rate bot loses money no matter the fees.
+      </p>
+
+      <h2>The Bottom Line</h2>
+
+      <p>
+        Fee ratio is the canary in the coal mine for automated trading systems. If it's above 50%, your bot is burning edge. If it's above 75%, your bot is already in the death spiral.
+      </p>
+
+      <p>
+        The worst part? Most developers never look at this metric. They see "Net profit: €50" and think the bot works. They miss the €21.60 in fees that ate 94% of the strategy's edge. By the time they notice fee ratio, they've already lost thousands.
+      </p>
+
+      <p>
+        Track it. Alert on it. Act on it. The difference between a successful bot and a capital-destructive one often comes down to whether you noticed the fee ratio before it got out of control.
+      </p>
+
+    </article>
+
+    <footer class="post-footer">
+      <p>
+        Reply via email at
+        <a href="mailto:alessandro.vozza@linux.com">alessandro.vozza@linux.com</a>,
+        or on <a href="https://x.com/ams0" target="_blank" rel="noopener">X/Twitter</a>.
+      </p>
+    </footer>
+
+  </main>
+
+  <footer>
+    <p>&copy; 2026 Feynman. All posts are available under <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a>.</p>
+  </footer>
+
+</body>
+</html>
