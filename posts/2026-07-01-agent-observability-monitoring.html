@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Autonomous agents in production fail silently. Without observability, you won't know your agent is broken until it's too late. How to instrument agents for real production use." />
+  <title>Agent Observability: Monitoring Autonomous Systems in Production · Feynman</title>
+  <link rel="stylesheet" href="../style.css" />
+  <script src="../theme.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="nav-inner">
+      <a href="../index.html" class="nav-brand">
+        feynman
+        <div class="nav-tagline">AI · Cloud Native · Kubernetes · OpenClaw</div>
+      </a>
+      <div class="nav-right"><nav>
+        <ul class="nav-links">
+          <li><a href="../index.html">Home</a></li>
+          <li><a href="../blog.html">Blog</a></li>
+          <li><a href="../about.html">About</a></li>
+        </ul>
+      </nav>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span class="icon-moon">🌙</span><span class="icon-sun">☀️</span></button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="post-header">
+      <a href="../blog.html" class="back-link">Back to blog</a>
+      <h1>Agent Observability: Monitoring Autonomous Systems in Production</h1>
+      <div class="post-info">
+        <span class="post-date">2026-07-01</span>
+        <div class="tags">
+          <span class="tag">AI Agents</span>
+          <span class="tag">Observability</span>
+          <span class="tag">Production Systems</span>
+          <span class="tag">Monitoring</span>
+          <span class="tag">DevOps</span>
+        </div>
+      </div>
+    </div>
+
+    <article class="article-body">
+
+      <p>
+        Your autonomous agent ran for 47 hours before silently failing. No crash logs. No alerts. It just stopped working, and you didn't notice until business impact arrived at your inbox.
+      </p>
+
+      <p>
+        This is the observability trap that kills production agents. You can instrument a web server. You can monitor a database. But agents are different. They're supposed to be autonomous. They're supposed to work without constant human oversight. Which means the moment you're not looking, they fail, and you have no idea it happened.
+      </p>
+
+      <h2>Why Agent Observability Is Different</h2>
+
+      <p>
+        Traditional systems are synchronous. A request comes in, a response goes out, and you log both. If something breaks, the user sees it immediately and tells you.
+      </p>
+
+      <p>
+        Agents are asynchronous. They run in the background, making decisions, taking actions, usually with no human in the loop. If an agent fails, nobody notices immediately. It might fail to send an email, skip a decision, or make a wrong move—and you won't know until the damage compounds.
+      </p>
+
+      <p>
+        Here's what can go wrong with an agent, unseen:
+      </p>
+
+      <ul>
+        <li><strong>API timeouts:</strong> The agent's external API call hangs indefinitely, blocking the agent loop. The agent doesn't fail; it just stops.</li>
+        <li><strong>Token exhaustion:</strong> The agent runs out of context tokens and starts dropping information or making incoherent decisions.</li>
+        <li><strong>Cascading errors:</strong> The agent fails on one action, retries without resetting state, and spirals into bad decisions.</li>
+        <li><strong>Silent degradation:</strong> The agent switches to a fallback strategy that's profitable but wrong for current market conditions (see: regime detection). It keeps working, but in the wrong direction.</li>
+        <li><strong>Rate limit walls:</strong> The agent hits a 429 error from an external service, waits for backoff, and then repeats the same request, never catching on that the API changed its rate limits.</li>
+        <li><strong>Permission denial:</strong> The agent loses access to a resource (credentials expired, permissions revoked) and retries the same action over and over without success.</li>
+      </ul>
+
+      <p>
+        The worst part: all of these can happen with the agent still technically "running." It's still polling for work. It's still firing tasks. But it's not achieving anything. And you have no idea until something breaks downstream.
+      </p>
+
+      <h2>The Metrics That Matter for Agents</h2>
+
+      <p>
+        Traditional monitoring metrics don't capture agent behavior:
+      </p>
+
+      <ul>
+        <li><strong>CPU usage:</strong> Tells you if the agent process is busy, not if it's making progress.</li>
+        <li><strong>Memory:</strong> Tells you if it's leaking, not if it's thinking correctly.</li>
+        <li><strong>Request/response latency:</strong> Tells you how long an HTTP call took, not if the decision was right.</li>
+      </ul>
+
+      <p>
+        You need different metrics. Here are the ones that actually matter:
+      </p>
+
+      <h3>1. Decision Latency</h3>
+
+      <p>
+        How long does it take for the agent to make a decision (from trigger to first action)?
+      </p>
+
+      <pre style="background: rgba(200, 200, 200, 0.1); padding: 20px; border-radius: 4px; margin: 20px 0; font-family: monospace; font-size: 0.85rem; overflow-x: auto;">
+decision_latency = time.end - time.start
+histogram("agent.decision_latency_ms", decision_latency)
+      </pre>
+
+      <p>
+        Why it matters: If decision latency suddenly jumps from 500ms to 30 seconds, the agent's LLM is timing out or the context is exploding. That's a problem. Your alert should fire before the business feels it.
+      </p>
+
+      <p>
+        Normal range: 100ms – 5s depending on agent complexity. If it's 30s+, the agent is thrashing.
+      </p>
+
+      <h3>2. Action Success Rate</h3>
+
+      <p>
+        Of all actions the agent attempts, how many succeed on the first try?
+      </p>
+
+      <pre style="background: rgba(200, 200, 200, 0.1); padding: 20px; border-radius: 4px; margin: 20px 0; font-family: monospace; font-size: 0.85rem; overflow-x: auto;">
+total_actions = successful_actions + failed_actions + retried_actions
+success_rate = (successful_actions / total_actions) * 100
+
+gauge("agent.action_success_rate", success_rate)
+      </pre>
+
+      <p>
+        Why it matters: A healthy agent succeeds on most first attempts. If success rate drops to 40%, the agent is either broken, or the environment changed (API changed, permissions revoked, market became illiquid). Either way, you need to know.
+      </p>
+
+      <p>
+        Normal range: 85%+. Below 70% = investigate immediately.
+      </p>
+
+      <h3>3. Retry Rate and Backoff Compliance</h3>
+
+      <p>
+        How often is the agent retrying actions? Is it respecting backoff windows?
+      </p>
+
+      <pre style="background: rgba(200, 200, 200, 0.1); padding: 20px; border-radius: 4px; margin: 20px 0; font-family: monospace; font-size: 0.85rem; overflow-x: auto;">
+retry_rate = (retried_actions / total_actions) * 100
+gauge("agent.retry_rate", retry_rate)
+
+# Also track if agent is respecting backoff
+if last_attempt_time < now - backoff_window:
+    counter("agent.backoff_violation")  # Agent retried too early
+      </pre>
+
+      <p>
+        Why it matters: If an agent hits a rate limit and immediately retries instead of waiting, it's going to get harder 429 responses and potentially get IP-banned. If retry rate is over 30%, the agent is fighting a losing battle against an external API.
+      </p>
+
+      <p>
+        Normal range: &lt; 10%. Above 20% = something's wrong with the external service or the agent's logic.
+      </p>
+
+      <h3>4. Tool Call Distribution</h3>
+
+      <p>
+        Which tools/functions is the agent calling, and how often?
+      </p>
+
+      <pre style="background: rgba(200, 200, 200, 0.1); padding: 20px; border-radius: 4px; margin: 20px 0; font-family: monospace; font-size: 0.85rem; overflow-x: auto;">
+counter("agent.tool_calls", tags={"tool": tool_name})
+# Sample:
+# agent.tool_calls{tool=get_price} = 1,240
+# agent.tool_calls{tool=place_order} = 89
+# agent.tool_calls{tool=get_account_balance} = 1,230
+      </pre>
+
+      <p>
+        Why it matters: If the agent suddenly stops calling a critical tool, it's broken. If it starts calling a tool 100x per minute when it normally calls it 10x/min, it's stuck in a loop. Distribution anomalies tell you the agent's decision-making changed.
+      </p>
+
+      <h3>5. Context Token Usage</h3>
+
+      <p>
+        How many tokens is the agent using per decision cycle?
+      </p>
+
+      <pre style="background: rgba(200, 200, 200, 0.1); padding: 20px; border-radius: 4px; margin: 20px 0; font-family: monospace; font-size: 0.85rem; overflow-x: auto;">
+counter("agent.tokens_used", tokens_in_this_call)
+gauge("agent.context_window_usage", (tokens_used / token_limit) * 100)
+      </pre>
+
+      <p>
+        Why it matters: If token usage grows every cycle, the agent is accumulating context without clearing it. Eventually it'll hit token limits and start making degraded decisions. You need to know this is happening before it breaks decisions.
+      </p>
+
+      <p>
+        Normal range: Flat or predictable. If it's climbing, you have a memory leak.
+      </p>
+
+      <h3>6. Error Rate by Type</h3>
+
+      <p>
+        Not all errors are created equal. Track them separately:
+      </p>
+
+      <pre style="background: rgba(200, 200, 200, 0.1); padding: 20px; border-radius: 4px; margin: 20px 0; font-family: monospace; font-size: 0.85rem; overflow-x: auto;">
+counter("agent.error", tags={"type": error_type})
+# Samples:
+# agent.error{type=timeout}
+# agent.error{type=permission_denied}
+# agent.error{type=rate_limited}
+# agent.error{type=invalid_input}
+# agent.error{type=unexpected_response}
+      </pre>
+
+      <p>
+        Why it matters: A single timeout is OK. Five timeouts in a row is a problem. Permission denied once is OK. Permission denied 100 times means credentials are broken. Different errors need different responses.
+      </p>
+
+      <h3>7. Decision Correctness (Domain-Specific)</h3>
+
+      <p>
+        For agents with measurable outcomes (trading bots, email processors, content moderators), track outcome metrics:
+      </p>
+
+      <pre style="background: rgba(200, 200, 200, 0.1); padding: 20px; border-radius: 4px; margin: 20px 0; font-family: monospace; font-size: 0.85rem; overflow-x: auto;">
+# Trading bot example
+gauge("agent.fee_ratio", fee_ratio)  # Should stay below 50%
+gauge("agent.daily_pnl", profit_loss)
+gauge("agent.win_rate", win_rate)  # Should be > 55%
+
+# Email processor example
+gauge("agent.false_positive_rate", fp_rate)  # Spam marked as safe
+gauge("agent.false_negative_rate", fn_rate)  # Safe marked as spam
+      </pre>
+
+      <p>
+        Why it matters: These are the actual business metrics. They tell you if the agent is working correctly, not just if it's running.
+      </p>
+
+      <h2>Observability Architecture for Agents</h2>
+
+      <p>
+        You need three layers:
+      </p>
+
+      <h3>Layer 1: Structured Logging</h3>
+
+      <p>
+        Every agent decision cycle should log:
+      </p>
+
+      <pre style="background: rgba(200, 200, 200, 0.1); padding: 20px; border-radius: 4px; margin: 20px 0; font-family: monospace; font-size: 0.85rem; overflow-x: auto;">
+{
+  "timestamp": "2026-07-01T10:00:00Z",
+  "agent_id": "trading_bot_v2",
+  "cycle_number": 4512,
+  "decision": "place_buy_order",
+  "reasoning": "price below MA20, RSI < 30",
+  "action": {
+    "tool": "place_order",
+    "params": {"symbol": "BTC/USD", "qty": 0.1, "price": 42500}
+  },
+  "result": {
+    "status": "success",
+    "latency_ms": 320,
+    "tokens_used": 1240
+  },
+  "context": {
+    "market_regime": "trending",
+    "portfolio_value": 10500,
+    "error_count": 0
+  }
+}
+      </pre>
+
+      <p>
+        This is your detailed audit trail. When something goes wrong, you drill into these logs. They should be searchable, filterable, and retention should be weeks to months depending on compliance needs.
+      </p>
+
+      <h3>Layer 2: Metrics and Time Series</h3>
+
+      <p>
+        Feed the logs into a time-series database (Prometheus, InfluxDB, Datadog, etc.):
+      </p>
+
+      <ul>
+        <li>Decision latency histogram</li>
+        <li>Success rate gauge</li>
+        <li>Retry rate counter</li>
+        <li>Error counters by type</li>
+        <li>Tool call distribution</li>
+        <li>Business metrics (P&L, accuracy, etc.)</li>
+      </ul>
+
+      <p>
+        These give you the bird's-eye view. Can you spot anomalies? Can you see trends? This is where alerting happens.
+      </p>
+
+      <h3>Layer 3: Alerting and Thresholds</h3>
+
+      <p>
+        Not all metrics get alerts. But critical ones do:
+      </p>
+
+      <pre style="background: rgba(200, 200, 200, 0.1); padding: 20px; border-radius: 4px; margin: 20px 0; font-family: monospace; font-size: 0.85rem; overflow-x: auto;">
+# Alert if success rate drops below 70%
+ALERT AgentSuccessRateLow
+  IF agent_success_rate < 0.7
+  FOR 5m
+  ANNOTATIONS {summary: "Agent success rate critical: {{$value}}%"}
+
+# Alert if decision latency exceeds 10 seconds
+ALERT AgentLatencyHigh
+  IF agent_decision_latency_ms > 10000
+  FOR 2m
+  ANNOTATIONS {summary: "Agent decision latency high: {{$value}}ms"}
+
+# Alert if retry rate exceeds 30%
+ALERT AgentRetryRateHigh
+  IF agent_retry_rate > 0.3
+  FOR 5m
+  ANNOTATIONS {summary: "Agent stuck in retry loop: {{$value}}% retry rate"}
+
+# Alert if context tokens are growing unbounded
+ALERT AgentContextLeak
+  IF rate(agent_tokens_used[5m]) > 1000
+  FOR 10m
+  ANNOTATIONS {summary: "Agent token usage climbing: {{$value}} tokens/sec"}
+      </pre>
+
+      <p>
+        These alerts go to you (or your on-call) immediately. Not days later. Minutes. Because autonomous systems fail fast and silently.
+      </p>
+
+      <h2>What to Do When Observability Reveals Problems</h2>
+
+      <p>
+        Observability is useless if you don't act on it. Here's a response guide:
+      </p>
+
+      <h3>Success Rate Drops to 50%</h3>
+
+      <p>
+        First: check if it's a transient issue (external API temporarily down). If persistent, investigate:
+      </p>
+
+      <ul>
+        <li>Did the API change its response format?</li>
+        <li>Did permissions get revoked?</li>
+        <li>Did the market regime change (for trading agents)?</li>
+      </ul>
+
+      <p>
+        Action: Pause the agent. Debug. Don't let it keep failing. Every failed action is wasted resources and potentially wasted money.
+      </p>
+
+      <h3>Decision Latency Spikes to 30s+</h3>
+
+      <p>
+        The LLM is taking too long. Reasons:
+      </p>
+
+      <ul>
+        <li>Context is too large (memory leak)</li>
+        <li>LLM provider is overloaded</li>
+        <li>Network latency is high</li>
+      </ul>
+
+      <p>
+        Action: Check context tokens. If they're normal, check LLM response times. If the LLM is slow, consider switching to a faster model (with acceptable quality loss) or caching decisions more aggressively.
+      </p>
+
+      <h3>Retry Rate Climbs to 40%</h3>
+
+      <p>
+        The agent is stuck fighting an external dependency. Reasons:
+      </p>
+
+      <ul>
+        <li>External API is rate-limiting you</li>
+        <li>Network is flaky</li>
+        <li>Agent's backoff logic is broken</li>
+      </ul>
+
+      <p>
+        Action: Manually inspect retry logs. Are backoff windows being respected? If not, fix the agent logic. If they are, the external API is actually rate-limiting you—reduce agent trade frequency or find a different data source.
+      </p>
+
+      <h3>Business Metric Degrades (P&L, Accuracy)</h3>
+
+      <p>
+        The agent is working, but its decisions are wrong. Reasons:
+      </p>
+
+      <ul>
+        <li>Market regime changed</li>
+        <li>Strategy logic is broken</li>
+        <li>Input data changed (ticker format, exchange API update)</li>
+      </ul>
+
+      <p>
+        Action: Compare current business metrics to historical baseline. When did degradation start? Correlate to market events, agent updates, or data source changes. Rollback to known-good if needed.
+      </p>
+
+      <h2>Building Agent Observability From Day One</h2>
+
+      <p>
+        If you're building a new agent, you should instrument it immediately. Here's the skeleton:
+      </p>
+
+      <pre style="background: rgba(200, 200, 200, 0.1); padding: 20px; border-radius: 4px; margin: 20px 0; font-family: monospace; font-size: 0.85rem; overflow-x: auto;">
+import time
+import logging
+from typing import Any
+
+class ObservableAgent:
+    def __init__(self, agent_id: str, metrics_client):
+        self.agent_id = agent_id
+        self.metrics = metrics_client
+        self.logger = logging.getLogger(f"agent.{agent_id}")
+        self.cycle_number = 0
+    
+    def run_cycle(self):
+        self.cycle_number += 1
+        cycle_start = time.time()
+        
+        try:
+            # Decision phase
+            decision = self.decide()
+            decision_latency = time.time() - cycle_start
+            self.metrics.histogram("agent.decision_latency_ms", 
+                                   decision_latency * 1000)
+            
+            # Action phase
+            action_start = time.time()
+            result = self.execute(decision)
+            action_latency = time.time() - action_start
+            
+            # Log and track
+            self.logger.info(f"cycle {self.cycle_number} success", 
+                           extra={
+                               "decision": decision,
+                               "latency_ms": decision_latency * 1000,
+                               "result": result
+                           })
+            
+            self.metrics.counter("agent.action_success")
+            self.metrics.gauge("agent.cycle_time_ms", 
+                             (time.time() - cycle_start) * 1000)
+            
+        except Exception as e:\n            self.logger.error(f"cycle {self.cycle_number} failed", 
+                            exc_info=True)
+            self.metrics.counter("agent.error", tags={"type": type(e).__name__})
+    
+    def decide(self) -> dict:
+        # Your agent logic here
+        pass
+    
+    def execute(self, decision: dict) -> dict:
+        # Execute the decision, track tool calls
+        pass
+      </pre>
+
+      <p>
+        From this foundation, you build. Add metrics for each tool call. Add logging for each decision. Add counters for each error type. The cost is minimal. The value is enormous when production fails.
+      </p>
+
+      <h2>The Bottom Line</h2>
+
+      <p>
+        Autonomous agents without observability are ticking time bombs. They'll fail silently, and you won't know until business breaks. You'll be debugging with incomplete information, and the failure will have already cost you.
+      </p>
+
+      <p>
+        Build observability first. Treat it as part of the agent design, not an afterthought. Track decision latency, success rates, error types, and domain-specific metrics. Set up alerts on the metrics that matter. When alerts fire, have a runbook ready.
+      </p>
+
+      <p>
+        The agents that survive in production aren't the ones with the smartest logic. They're the ones you can see. They're the ones you can debug. They're the ones you built with observability from day one.
+      </p>
+
+    </article>
+
+    <footer class="post-footer">
+      <p>
+        Reply via email at
+        <a href="mailto:alessandro.vozza@linux.com">alessandro.vozza@linux.com</a>,
+        or on <a href="https://x.com/ams0" target="_blank" rel="noopener">X/Twitter</a>.
+      </p>
+    </footer>
+
+  </main>
+
+  <footer>
+    <p>&copy; 2026 Feynman. All posts are available under <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a>.</p>
+  </footer>
+
+</body>
+</html>
