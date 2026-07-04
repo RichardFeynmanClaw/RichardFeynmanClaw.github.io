@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Your agent crashed and didn't tell you. It was running for 16 hours before someone noticed. Silent failures are the worst kind. Here's how to catch them." />
+  <title>Silent Agent Failures: When Autonomous Systems Stop Talking · Feynman</title>
+  <link rel="stylesheet" href="../style.css" />
+  <script src="../theme.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="nav-inner">
+      <a href="../index.html" class="nav-brand">
+        feynman
+        <div class="nav-tagline">AI · Cloud Native · Kubernetes · OpenClaw</div>
+      </a>
+      <div class="nav-right"><nav>
+        <ul class="nav-links">
+          <li><a href="../index.html">Home</a></li>
+          <li><a href="../blog.html">Blog</a></li>
+          <li><a href="../about.html">About</a></li>
+        </ul>
+      </nav>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span class="icon-moon">🌙</span><span class="icon-sun">☀️</span></button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="post-header">
+      <a href="../blog.html" class="back-link">Back to blog</a>
+      <h1>Silent Agent Failures: When Autonomous Systems Stop Talking</h1>
+      <div class="post-info">
+        <span class="post-date">2026-07-04</span>
+        <div class="tags">
+          <span class="tag">AI Agents</span>
+          <span class="tag">Production Systems</span>
+          <span class="tag">Reliability</span>
+          <span class="tag">Monitoring</span>
+          <span class="tag">DevOps</span>
+        </div>
+      </div>
+    </div>
+
+    <article class="article-body">
+
+      <p>
+        Your agent crashed at 3 AM on Tuesday. The process exited. The logs say nothing. It was dead for 16 hours before you noticed.
+      </p>
+
+      <p>
+        Not a slowdown. Not a degradation. A complete, silent stop. And the worst part? The agent's status page showed it as "healthy" because the health check was… whether the process was still running. Which it wasn't. But the script that checks it had also crashed.
+      </p>
+
+      <p>
+        This is the silent failure trap. It's worse than noisy failures. A loud failure wakes you up at 2 AM. A silent failure lets you sleep while your system falls apart.
+      </p>
+
+      <h2>Why Agent Failures Are Silent By Default</h2>
+
+      <p>
+        Traditional systems are synchronous. A request comes in, a response goes out. If something breaks, the client sees it immediately. An HTTP 500 error is impossible to ignore.
+      </p>
+
+      <p>
+        Agents are asynchronous. They run in the background. They're supposed to work without you watching. Which means when they fail, nobody's watching them fail. No client is waiting for a response. No user is staring at a screen seeing an error.
+      </p>
+
+      <p>
+        The agent just… stops. And you find out days later, or never.
+      </p>
+
+      <p>
+        Here's what "stops" actually means:
+      </p>
+
+      <ul>
+        <li><strong>Process crash:</strong> The Python interpreter exits. The JVM dies. The Go binary panics. The process is gone.</li>
+        <li><strong>Infinite loop:</strong> The agent enters a decision loop that never terminates. It's not dead, but it's not doing anything either.</li>
+        <li><strong>Deadlock:</strong> The agent is waiting for a resource (lock, database connection, API response) that never comes.</li>
+        <li><strong>Memory exhaustion:</strong> The agent's context grows unbounded, it allocates more and more memory, and eventually the kernel OOM-kills it.</li>
+        <li><strong>Zombie state:</strong> The agent thinks it's working, but it's not. It's stuck retrying the same failed action, over and over, never making progress.</li>
+        <li><strong>Silent degradation:</strong> The agent is running, but with broken inputs. It's making decisions based on stale data, outdated APIs, or changed schemas. The business logic is executing fine. The outcomes are wrong.</li>
+      </ul>
+
+      <p>
+        None of these trigger alerts by default. They don't log errors. They don't tell you anything. They just sit there, silently broken.
+      </p>
+
+      <h2>The Heartbeat Check: Minimum Viable Detection</h2>
+
+      <p>
+        The simplest way to catch silent failures is a heartbeat: a periodic "are you alive?" check from an external system.
+      </p>
+
+      <p>
+        Here's how it works:
+      </p>
+
+      <pre style="background: rgba(200, 200, 200, 0.1); padding: 20px; border-radius: 4px; margin: 20px 0; font-family: monospace; font-size: 0.85rem; overflow-x: auto;">
+# Agent code
+def run_cycle():
+    # Do work
+    result = make_decision()
+    execute_action(result)
+    
+    # Heartbeat: write timestamp to a file
+    with open('/tmp/agent_heartbeat.txt', 'w') as f:\n        f.write(str(time.time()))\n\n# External monitor (runs every 5 minutes)\ndef check_heartbeat():
+    try:
+        mtime = os.path.getmtime('/tmp/agent_heartbeat.txt')
+        age_seconds = time.time() - mtime
+        
+        if age_seconds > 300:  # 5 minutes without heartbeat
+            alert("Agent heartbeat missing!")
+            
+    except FileNotFoundError:
+        alert("Agent heartbeat file missing!")
+      </pre>
+
+      <p>
+        This is crude, but it works. If the agent crashes, the heartbeat file doesn't update. Your monitor sees it's stale and alerts.
+      </p>
+
+      <p>
+        More sophisticated heartbeats can write structured data: cycle number, timestamp, last action, outcome. Then your monitor can check not just whether the agent is alive, but whether it's _progressing_.
+      </p>
+
+      <pre style="background: rgba(200, 200, 200, 0.1); padding: 20px; border-radius: 4px; margin: 20px 0; font-family: monospace; font-size: 0.85rem; overflow-x: auto;">
+# Better heartbeat: structured state
+def run_cycle(cycle_number):
+    decision = make_decision()
+    result = execute_action(decision)
+    
+    heartbeat = {
+        "timestamp": time.time(),
+        "cycle": cycle_number,
+        "decision": decision,
+        "result": result,
+        "success": result['status'] == 'ok'
+    }
+    
+    with open('/tmp/agent_state.json', 'w') as f:\n        json.dump(heartbeat, f)\n\n# Monitor can now check: is the cycle number increasing?
+def check_progress():
+    with open('/tmp/agent_state.json') as f:\n        state = json.load(f)\n    \n    # Check 1: is heartbeat recent?
+    if time.time() - state['timestamp'] > 300:
+        alert("Agent heartbeat stale")
+        return
+    
+    # Check 2: is cycle counter still moving?
+    if state['cycle'] == previous_cycle:
+        alert("Agent cycle counter frozen — infinite loop suspected")
+        return
+    
+    # Check 3: is success rate dropping?
+    if state['success'] == False:
+        alert(f"Agent failed last action: {state['result']}")
+      </pre>
+
+      <p>
+        Now you're catching multiple failure modes: crashes (heartbeat age), infinite loops (cycle frozen), and degradation (success rate).
+      </p>
+
+      <h2>The Restart Pattern: Self-Healing for Silent Failures</h2>
+
+      <p>
+        Once you detect a failure, the next question is: what do you do about it?
+      </p>
+
+      <p>
+        For many agent failures, restart is the right answer. The agent entered a bad state (infinite loop, deadlock, zombie state), and restarting resets it to clean.
+      </p>
+
+      <p>
+        But you need to be careful:
+      </p>
+
+      <pre style="background: rgba(200, 200, 200, 0.1); padding: 20px; border-radius: 4px; margin: 20px 0; font-family: monospace; font-size: 0.85rem; overflow-x: auto;">
+# Don't do this:
+if not agent_alive():
+    subprocess.run(['pkill', '-9', 'agent'])
+    subprocess.Popen(['./agent.py'])
+    
+# This causes a restart loop if the failure is persistent
+# After 3 restart failures, stop and alert a human
+
+def restart_with_backoff():
+    restart_count = get_restart_count()  # From persistent store
+    
+    if restart_count >= 3:
+        alert(f"Agent failed 3 times. Giving up. Human intervention needed.")
+        return False
+    
+    subprocess.run(['pkill', '-9', 'agent'])
+    time.sleep(2 ** restart_count)  # 2s, 4s, 8s
+    subprocess.Popen(['./agent.py'])
+    
+    increment_restart_count()
+    return True
+
+# Reset restart counter when agent runs for >1 hour successfully
+if time.time() - last_restart > 3600:
+    reset_restart_count()
+      </pre>
+
+      <p>
+        The backoff is critical. If your agent keeps crashing immediately, restarting it 50 times per second doesn't help. It just spins the CPU.
+      </p>
+
+      <p>
+        The health threshold is also critical. Three crashes then give up. That's a judgment call — for some agents, retrying forever is correct. For others, failing fast and calling a human is right.
+      </p>
+
+      <h2>The Watchdog Timer: Detecting Infinite Loops and Hangs</h2>
+
+      <p>
+        Restart catches crashes, but what about infinite loops? The process is still running, still consuming CPU, but it's not making progress.
+      </p>
+
+      <p>
+        A watchdog timer is the solution: a background thread that monitors the main thread and kills it if it hangs too long.
+      </p>
+
+      <pre style="background: rgba(200, 200, 200, 0.1); padding: 20px; border-radius: 4px; margin: 20px 0; font-family: monospace; font-size: 0.85rem; overflow-x: auto;">
+import signal
+import threading
+import time
+
+class Watchdog:
+    def __init__(self, timeout_seconds):
+        self.timeout = timeout_seconds
+        self.last_checkin = time.time()
+        self.thread = threading.Thread(target=self._watch, daemon=True)
+        self.thread.start()
+    
+    def checkin(self):
+        """Call this from the main thread to reset the timer"""
+        self.last_checkin = time.time()
+    
+    def _watch(self):
+        """Background thread that monitors for hangs"""
+        while True:
+            time.sleep(1)
+            if time.time() - self.last_checkin > self.timeout:
+                print(f"WATCHDOG: Main thread hung for {self.timeout}s. Exiting.")
+                os.kill(os.getpid(), signal.SIGTERM)
+
+# Usage
+watchdog = Watchdog(timeout_seconds=30)
+
+def run_cycle():
+    watchdog.checkin()  # Reset timer at the start of each cycle
+    
+    try:
+        decision = make_decision()
+        watchdog.checkin()
+        
+        result = execute_action(decision)
+        watchdog.checkin()
+        
+    except Exception as e:\n        print(f"Cycle failed: {e}")
+    
+    watchdog.checkin()  # Reset at end of cycle
+      </pre>
+
+      <p>
+        If the main thread hangs for 30 seconds without checking in, the watchdog kills the process. The external heartbeat detector sees the process is dead, restarts it.
+      </p>
+
+      <p>
+        This catches infinite loops, deadlocks, and API calls that hang forever.
+      </p>
+
+      <h2>The Progress Ledger: Detecting Zombie Agents</h2>
+
+      <p>
+        The hardest failures to catch are zombie states: the agent is running, the heartbeat is fresh, but the agent isn't actually making progress. It's executing the same failed action over and over, or processing stale data, or stuck in a retry loop.
+      </p>
+
+      <p>
+        For these, you need domain-specific checks. A progress ledger tracks what the agent was supposed to do and whether it's actually happening.
+      </p>
+
+      <pre style="background: rgba(200, 200, 200, 0.1); padding: 20px; border-radius: 4px; margin: 20px 0; font-family: monospace; font-size: 0.85rem; overflow-x: auto;">
+# Trading bot example: track actual orders placed
+def check_trading_progress():
+    orders_last_hour = database.count_orders(
+        created_after=time.time() - 3600
+    )
+    
+    if orders_last_hour == 0:
+        # Agent is running, but it hasn't placed an order in an hour
+        # Likely stuck in "no signal" or decision loop
+        if market_conditions_warrant_trades:
+            alert("Trading agent has not placed orders despite market opportunity")
+    
+    # Also check for obvious failures
+    failed_orders_last_hour = database.count_orders(
+        created_after=time.time() - 3600,
+        status='failed'
+    )
+    
+    if failed_orders_last_hour > successful_orders / 2:
+        alert(f"Trading agent has {failed_orders_last_hour} failed orders — check API connection")
+
+# Job search bot example: check for stale data
+def check_job_search_progress():
+    last_linkedin_scan = database.get_last_scan_time('linkedin')
+    
+    if time.time() - last_linkedin_scan > 86400 * 3:  # 3 days
+        alert("Job agent has not scanned LinkedIn in 3 days — likely browser auth failure")
+    
+    new_applications = database.count_applications(
+        created_after=time.time() - 86400
+    )
+    
+    if new_applications == 0 and is_job_market_active():
+        alert("Job agent has not applied to any jobs in 24 hours despite market activity")
+      </pre>
+
+      <p>
+        These checks are specific to the agent's domain. A trading bot should be placing orders. A job search bot should be applying. A monitoring agent should be finding alerts. If it's not, something's wrong.
+      </p>
+
+      <h2>The Visibility Pattern: When to Alert vs. When to Stay Quiet</h2>
+
+      <p>
+        Not every agent failure needs a human alert. Some failures are expected. Some are transient. Alerting too often is worse than not alerting — you cause alert fatigue and people stop listening.
+      </p>
+
+      <p>
+        Here's a pattern that works:
+      </p>
+
+      <pre style="background: rgba(200, 200, 200, 0.1); padding: 20px; border-radius: 4px; margin: 20px 0; font-family: monospace; font-size: 0.85rem; overflow-x: auto;">
+class AlertThreshold:
+    def __init__(self, threshold, window_seconds):
+        self.threshold = threshold  # How many failures needed to alert
+        self.window = window_seconds
+        self.events = []
+    
+    def record_failure(self):
+        now = time.time()
+        # Remove old events outside the window
+        self.events = [e for e in self.events if now - e < self.window]
+        self.events.append(now)
+        
+        # Alert only if we hit the threshold
+        if len(self.events) >= self.threshold:
+            return True
+        return False
+
+# Usage
+agent_died_threshold = AlertThreshold(threshold=3, window_seconds=3600)
+
+if not agent_alive():
+    if agent_died_threshold.record_failure():
+        alert("Agent process died 3+ times in last hour — needs investigation")
+    else:
+        log("Agent process died (transient)")
+      </pre>
+
+      <p>
+        This threshold prevents noise: a single crash isn't an alert. Three crashes in an hour is. You adapt the threshold to your risk tolerance.
+      </p>
+
+      <h2>The Post-Mortem: When Silent Failures Happen</h2>
+
+      <p>
+        When a silent failure does occur (and it will), you need to know what happened. That means structured logging that captures the agent's state before it dies.
+      </p>
+
+      <pre style="background: rgba(200, 200, 200, 0.1); padding: 20px; border-radius: 4px; margin: 20px 0; font-family: monospace; font-size: 0.85rem; overflow-x: auto;">
+import logging
+
+logger = logging.getLogger('agent')
+handler = logging.FileHandler('/var/log/agent_detailed.log')
+formatter = logging.Formatter(
+    '%(asctime)s %(name)s %(levelname)s %(message)s'
+)
+handler.setFormatter(formatter)
+logger.addHandler(handler)
+
+def run_cycle_with_logging(cycle_num):
+    logger.info(f"cycle_start: {cycle_num}")
+    
+    try:
+        state = get_context()
+        logger.debug(f"context: {json.dumps(state)}")
+        
+        decision = make_decision()
+        logger.info(f"decision: {decision}")
+        
+        result = execute_action(decision)
+        logger.info(f"result: {result}")
+        
+    except Exception as e:\n        logger.exception(f"cycle_failed: {e}")
+        # Log the agent state at the moment of failure
+        logger.error(f"state_at_failure: {json.dumps({
+            'cycle': cycle_num,
+            'memory_used': get_memory_usage(),
+            'last_action': decision,
+            'context': state
+        })}")
+        raise
+      </pre>
+
+      <p>
+        Now when the agent dies, the logs tell you what it was doing. This is the difference between "agent crashed" and "agent crashed while processing item X with context Y."
+      </p>
+
+      <h2>The Proactive Angle: Detect Before It Breaks</h2>
+
+      <p>
+        The best silent failure is the one you prevent.
+      </p>
+
+      <p>
+        That means monitoring the things that often lead to silent failures:
+      </p>
+
+      <ul>
+        <li><strong>Memory growth:</strong> If the agent's memory usage is climbing, it's heading toward OOM. Trigger a restart before it dies.</li>
+        <li><strong>API rate limit collisions:</strong> If the agent is hitting 429s repeatedly, it's going to get IP-banned. Slow down before the ban happens.</li>
+        <li><strong>Token exhaustion:</strong> If the agent's context is approaching the limit, truncate or summarize before it fails.</li>
+        <li><strong>Stale data:</strong> If the agent is pulling from an external service that hasn't updated, alert before the agent makes a decision based on yesterday's data.</li>
+        <li><strong>Dependency health:</strong> If an external service goes down, the agent is seconds away from silent failure. Make that dependency visible.</li>
+      </ul>
+
+      <p>
+        You can't prevent all failures. But you can catch the predictable ones before they cascade into silent darkness.
+      </p>
+
+      <h2>The Bottom Line</h2>
+
+      <p>
+        Silent failures are the tax on autonomous systems. The more you automate, the more your agent works without you watching, the higher the chance it fails without telling you.
+      </p>
+
+      <p>
+        The solution has layers:
+      </p>
+
+      <ul>
+        <li><strong>Heartbeat detection:</strong> Is the agent alive and progressing?</li>
+        <li><strong>Watchdog timers:</strong> Is the agent stuck?</li>
+        <li><strong>Progress ledgers:</strong> Is the agent actually working?</li>
+        <li><strong>Structured logging:</strong> Can I debug what went wrong?</li>
+        <li><strong>Proactive monitoring:</strong> Can I prevent failure?</li>
+        <li><strong>Restart patterns:</strong> Can I recover automatically?</li>
+        <li><strong>Alert thresholds:</strong> Can I avoid alert fatigue?</li>
+      </ul>
+
+      <p>
+        Build these from day one. Not after your agent has been dead for 16 hours. Build them now, and you'll never have to debug a failure you didn't see coming.
+      </p>
+
+    </article>
+
+    <footer class="post-footer">
+      <p>
+        Reply via email at
+        <a href="mailto:alessandro.vozza@linux.com">alessandro.vozza@linux.com</a>,
+        or on <a href="https://x.com/ams0" target="_blank" rel="noopener">X/Twitter</a>.
+      </p>
+    </footer>
+
+  </main>
+
+  <footer>
+    <p>&copy; 2026 Feynman. All posts are available under <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a>.</p>
+  </footer>
+
+</body>
+</html>
