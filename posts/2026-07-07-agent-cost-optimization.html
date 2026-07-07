@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Your agent is profitable. But 94% of its profit goes to fees. The hidden tax on autonomous systems—and how to reclaim it." />
+  <title>Agent Cost Optimization: The Hidden Tax on Autonomous Systems · Feynman</title>
+  <link rel="stylesheet" href="../style.css" />
+  <script src="../theme.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="nav-inner">
+      <a href="../index.html" class="nav-brand">
+        feynman
+        <div class="nav-tagline">AI · Cloud Native · Kubernetes · OpenClaw</div>
+      </a>
+      <div class="nav-right"><nav>
+        <ul class="nav-links">
+          <li><a href="../index.html">Home</a></li>
+          <li><a href="../blog.html">Blog</a></li>
+          <li><a href="../about.html">About</a></li>
+        </ul>
+      </nav>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span class="icon-moon">🌙</span><span class="icon-sun">☀️</span></button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="post-header">
+      <a href="../blog.html" class="back-link">Back to blog</a>
+      <h1>Agent Cost Optimization: The Hidden Tax on Autonomous Systems</h1>
+      <div class="post-info">
+        <span class="post-date">2026-07-07</span>
+        <div class="tags">
+          <span class="tag">AI Agents</span>
+          <span class="tag">Cost Optimization</span>
+          <span class="tag">Production Systems</span>
+          <span class="tag">Economics</span>
+          <span class="tag">DevOps</span>
+        </div>
+      </div>
+    </div>
+
+    <article class="article-body">
+
+      <p>
+        Your autonomous agent made €100 last week. It also paid €94 in fees.
+      </p>
+
+      <p>
+        You didn't notice because the agent was running in the background, and you were looking at gross profit, not net. But this is the reality of production agents: the cost landscape is completely different from batch jobs or traditional services. Every action your agent takes has a price tag. And those price tags compound.
+      </p>
+
+      <h2>The Three Cost Layers of Autonomous Agents</h2>
+
+      <p>
+        When you run a traditional service, costs are straightforward: compute, storage, network, maybe a database. When you run an autonomous agent, you're paying three separate taxes.
+      </p>
+
+      <h3>1. Transaction Costs</h3>
+
+      <p>
+        Every action your agent takes costs money. Trading fee? Market data subscription? API call to a third-party service? Payment processing charge?
+      </p>
+
+      <p>
+        These costs are proportional to <strong>volume</strong>. The more trades your agent places, the more it pays. The more emails it sends, the more it spends. The more API calls it makes, the less efficient it becomes.
+      </p>
+
+      <p>
+        Most teams don't track this. They look at the outcome (€100 profit) and miss the mechanism (€94 in fees to make it happen). By the time they notice, they've been paying a hidden tax for months.
+      </p>
+
+      <p>
+        <strong>The problem:</strong> Agents naturally gravitate toward higher-frequency strategies because they're easier to implement. Your agent sees a slight edge in the market? Execute 20 times per hour. That edge shrinks when fees are factored in—but the agent doesn't know that. It keeps executing.
+      </p>
+
+      <h3>2. Computational Costs</h3>
+
+      <p>
+        Your agent runs on servers. Those servers cost money.
+      </p>
+
+      <p>
+        For a trading bot that runs every minute, this is manageable. For an OpenClaw agent that spawns sub-agents and manages complex workflows, compute costs can balloon. Token usage alone can destroy your economics: a decision that takes 100K tokens to make might cost more than the decision is worth.
+      </p>
+
+      <p>
+        <strong>The hidden pattern:</strong> Agents often solve problems by <em>thinking harder</em>. They use more tokens. They spawn more sub-agents. They iterate more before deciding. This works for one-off tasks. It fails for production systems that need to make thousands of decisions.
+      </p>
+
+      <p>
+        A trading agent that uses Claude 3.5 Sonnet and spends 50K tokens per decision will lose money in fees before it even places the first trade.
+      </p>
+
+      <h3>3. Operational Overhead</h3>
+
+      <p>
+        Keeping an agent running costs time and attention. Monitoring, incident response, debugging, reconfiguration, and the inevitable rewrites when you realize the strategy was wrong.
+      </p>
+
+      <p>
+        Most teams don't quantify this. You spent 4 hours last Tuesday fixing a bug in your agent. That's a cost. You spent 2 hours Friday retuning parameters. That's a cost too. When you add up the overhead, it often exceeds the agent's actual profit.
+      </p>
+
+      <h2>The Death Spiral: When Costs Consume Returns</h2>
+
+      <p>
+        Here's where it gets dangerous: costs and returns have different shapes.
+      </p>
+
+      <p>
+        Your agent's profit follows a sigmoid curve. Early on, returns scale with effort. But as you push the strategy harder, returns plateau. You keep executing more, more, more, hoping to find more edge. Instead, you're just paying more fees to capture the same base profit.
+      </p>
+
+      <p>
+        Meanwhile, your costs are <strong>linear</strong> or worse. More transactions = more fees. More computation = higher cloud bills. More complexity = more operational overhead.
+      </p>
+
+      <p>
+        The intersection point is where most teams end up. Your agent is still working. It's still profitable. But 94% of the profit is going to fees. You're running a business where the customer (your agent's strategy) makes money, but the infrastructure (fees and overhead) takes most of it.
+      </p>
+
+      <p>
+        And the temptation is always to double down. If the agent made €100 with a 94% fee ratio, surely if we optimize the parameters, we can make €200? In practice, you'll make €120 and pay €118 in fees. The ratio gets worse, not better, because you're fighting against structural constraints.
+      </p>
+
+      <h2>How to Fix It</h2>
+
+      <h3>1. Make Costs Visible</h3>
+
+      <p>
+        Your first step: stop looking at gross profit. Track net profit. Better yet, track cost-per-decision and cost-per-action. For a trading bot, that's fees-per-trade. For a data processing agent, it's API cost-per-record. For an OpenClaw agent, it's compute cost-per-decision.
+      </p>
+
+      <p>
+        Once you see it, you can optimize it.
+      </p>
+
+      <h3>2. Batch Decisions, Not Individual Actions</h3>
+
+      <p>
+        Instead of making 20 trading decisions per hour, consider batching them. Evaluate everything once per hour, make one decision, execute once. You'll pay the fee cost once instead of 20 times, and you might find that the one good decision outperforms 20 mediocre ones.
+      </p>
+
+      <p>
+        For OpenClaw agents, this means: don't spawn a sub-agent for each item. Batch process 100 items with one sub-agent. The per-item cost drops dramatically.
+      </p>
+
+      <h3>3. Use Cheaper Models for Routine Decisions</h3>
+
+      <p>
+        Your agent doesn't need Claude Opus to decide whether to skip a trade or process a routine email. Use a smaller, faster model for the common case. Save expensive models for the edge cases that actually need deep reasoning.
+      </p>
+
+      <p>
+        A two-tier decision system—Haiku for 95% of decisions, Opus for the remaining 5%—can cut your computational cost in half while improving latency.
+      </p>
+
+      <h3>3. Accept Lower Edge, Higher Efficiency</h3>
+
+      <p>
+        The hardest decision: sometimes you need to accept a lower return to make the math work.
+      </p>
+
+      <p>
+        If your trading strategy has a 2% edge but costs 3% in fees, it doesn't work. But a 10% edge with 2% fees works great. It's better to trade less frequently and capture more per-trade than to trade constantly and lose on fees.
+      </p>
+
+      <p>
+        This is counterintuitive for most engineers. We're trained to optimize for throughput. With autonomous systems, sometimes the win is lower throughput, lower costs, and net positive returns.
+      </p>
+
+      <h3>4. Build Cost Awareness Into Agent Design</h3>
+
+      <p>
+        When you build a new agent, include cost as a first-class constraint from day one. Not an afterthought. Not something you optimize for later.
+      </p>
+
+      <p>
+        Sketch out: What's the max cost per decision? What's the max compute budget? What fee structure can we live with? Then design the agent to stay within those bounds.
+      </p>
+
+      <p>
+        An agent that knows its cost budget and refuses to overspend will outperform one that was designed for speed first and cost-optimized later.
+      </p>
+
+      <h2>The Real Lesson</h2>
+
+      <p>
+        Autonomous agents are not just faster versions of batch jobs. They operate in a completely different economic model. Costs compound. Fees pile up. Overhead grows.
+      </p>
+
+      <p>
+        Most teams don't see this coming. Their agent is profitable on paper. It's in production. It's running smoothly. And then someone does the math and realizes 94% of the profit is being eaten by fees. At that point, the only fix is redesign.
+      </p>
+
+      <p>
+        Start tracking costs now. Make them visible. Optimize ruthlessly. The difference between a sustainable agent and a money-losing one is often just cost awareness.
+      </p>
+
+    </article>
+
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+      <p>
+        © 2026 Alessandro Vozza. Made with <span style="color: #e74c3c;">◆</span> for the cloud-native world.
+      </p>
+      <div class="footer-nav">
+        <a href="../index.html">Home</a>
+        <a href="../blog.html">Blog</a>
+        <a href="../about.html">About</a>
+      </div>
+    </div>
+  </footer>
+
+</body>
+</html>
