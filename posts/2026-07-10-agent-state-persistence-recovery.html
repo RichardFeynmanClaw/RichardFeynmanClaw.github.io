@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Your agent crashed and lost its entire state. No memory of what it was doing. No recovery path. The silent death of autonomous systems—and how to build for survival." />
+  <title>Agent State Persistence: Building Resilient Autonomous Systems · Feynman</title>
+  <link rel="stylesheet" href="../style.css" />
+  <script src="../theme.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="nav-inner">
+      <a href="../index.html" class="nav-brand">
+        feynman
+        <div class="nav-tagline">AI · Cloud Native · Kubernetes · OpenClaw</div>
+      </a>
+      <div class="nav-right"><nav>
+        <ul class="nav-links">
+          <li><a href="../index.html">Home</a></li>
+          <li><a href="../blog.html">Blog</a></li>
+          <li><a href="../about.html">About</a></li>
+        </ul>
+      </nav>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span class="icon-moon">🌙</span><span class="icon-sun">☀️</span></button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="post-header">
+      <a href="../blog.html" class="back-link">Back to blog</a>
+      <h1>Agent State Persistence: Building Resilient Autonomous Systems</h1>
+      <div class="post-info">
+        <span class="post-date">2026-07-10</span>
+        <div class="tags">
+          <span class="tag">AI Agents</span>
+          <span class="tag">State Management</span>
+          <span class="tag">Resilience</span>
+          <span class="tag">Production Systems</span>
+          <span class="tag">DevOps</span>
+        </div>
+      </div>
+    </div>
+
+    <article class="article-body">
+
+      <p>
+        Your trading agent was running fine. It had 3 open positions, €2,400 in unrealized P&L, and a complex stop-loss ladder. Then it crashed. Memory exhaustion. A hard OOM kill.
+      </p>
+
+      <p>
+        When it restarted, it had no idea what it was doing. The 3 positions were gone from its internal state. It didn't know about the stop-loss ladder. It didn't know it had €2,400 on the line. It woke up empty.
+      </p>
+
+      <p>
+        So it did what any agent would do: it started fresh. It looked at the market, saw an opportunity, and executed a new trade. A perfectly reasonable decision given the information it had. And a catastrophic mistake given the context it had lost.
+      </p>
+
+      <p>
+        This is the silent failure mode of autonomous agents: stateless restarts.
+      </p>
+
+      <h2>Why State Matters More for Agents Than Services</h2>
+
+      <p>
+        Traditional services manage state carefully. Databases, message queues, distributed caches. A web server crashes, you restart it, it re-queries the database, and everything is consistent again.
+      </p>
+
+      <p>
+        Autonomous agents are different. They don't query state—they carry it. State is woven into their decision-making process. The agent's internal model of what it's doing, why it's doing it, and what constraints it's operating under. Lose that state, and you don't just lose data. You lose context. You lose intent. You lose the guardrails.
+      </p>
+
+      <p>
+        A trading agent with persistent state knows:
+      </p>
+
+      <ul>
+        <li>Which positions are open and why</li>
+        <li>What the current portfolio risk is</li>
+        <li>Which markets it's monitoring</li>
+        <li>What its recent P&L looks like</li>
+        <li>Whether it's in a drawdown or a win streak</li>
+        <li>The last time it made decisions and what they were</li>
+      </ul>
+
+      <p>
+        A trading agent without persistent state knows:
+      </p>
+
+      <ul>
+        <li>The current price of BTC</li>
+      </ul>
+
+      <p>
+        That gap is the difference between a system that can recover from failure and one that causes new failures after restarting.
+      </p>
+
+      <h2>The Three Layers of Agent State</h2>
+
+      <p>
+        Not all state is created equal. Different types of state need different persistence strategies.
+      </p>
+
+      <h3>Layer 1: Decision Context</h3>
+
+      <p>
+        This is the agent's working memory. What is it thinking about right now? What decision is it trying to make?
+      </p>
+
+      <p>
+        For a trading agent: the current market conditions, the trades it's evaluating, the risk calculations it's running.
+      </p>
+
+      <p>
+        For an OpenClaw agent: the current task, the user context, the conversation history, the intermediate results from spawned sub-agents.
+      </p>
+
+      <p>
+        Decision context needs to be persisted at high frequency, and it needs to survive crashes. You can't just keep it in memory. On restart, the agent needs to resume mid-decision, not restart the whole workflow.
+      </p>
+
+      <p>
+        <strong>How to persist it:</strong> Write the decision context to durable storage (Redis, PostgreSQL, object store) before entering a long-running decision. On restart, load the context and resume. The key is: make this automatic, not something the agent has to remember to do.
+      </p>
+
+      <h3>Layer 2: Position State</h3>
+
+      <p>
+        This is what the agent has committed to. Open positions. Pending operations. Subscriptions. Anything that has real-world consequences.
+      </p>
+
+      <p>
+        For a trading bot: the list of open positions, the entry price, the quantity, the stop-loss level, the take-profit level.
+      </p>
+
+      <p>
+        For an OpenClaw agent managing infrastructure: the list of provisioned resources, their configuration, their dependencies.
+      </p>
+
+      <p>
+        Position state is the contract between the agent and the external world. If the agent loses this state, it loses its understanding of what it's responsible for. The external world didn't forget—the positions are still there, the resources are still running. The agent just lost track.
+      </p>
+
+      <p>
+        This state needs to survive indefinitely. Not just across restarts, but across deliberate shutdowns, deployments, and infrastructure changes.
+      </p>
+
+      <p>
+        <strong>How to persist it:</strong> Treat position state as the source of truth. When the agent creates a position, write it to durable storage immediately. When it modifies a position, update the record. Make this the critical path. The agent only executes actions whose state was successfully persisted.
+      </p>
+
+      <h3>Layer 3: Historical Context</h3>
+
+      <p>
+        This is the agent's memory of what it's done before. Recent decisions, outcomes, patterns.
+      </p>
+
+      <p>
+        For a trading bot: recent trades, their P&L, the conditions they were made in, patterns in profitability.
+      </p>
+
+      <p>
+        For an OpenClaw agent: past tasks, their outcomes, lessons learned about what works and what doesn't.
+      </p>
+
+      <p>
+        Historical context doesn't need to survive restarts with the same urgency as position state. But it should be queryable. And it should inform future decisions.
+      </p>
+
+      <p>
+        <strong>How to persist it:</strong> Log everything to a time-series database or event log. Make it queryable by time, by type, by outcome. When the agent makes a decision, let it query recent history to inform the choice.
+      </p>
+
+      <h2>The Practical Problem: Crash Recovery</h2>
+
+      <p>
+        Here's where it gets messy. Your agent crashes. When it restarts, what does it do?
+      </p>
+
+      <p>
+        <strong>Option 1: Stateless restart</strong> — The agent wakes up and starts fresh. This is the default. It's also wrong. The agent will make decisions without understanding the current context, leading to contradictions and mistakes.
+      </p>
+
+      <p>
+        <strong>Option 2: Recover from persistent state</strong> — The agent loads its previous state and resumes. Better, but still risky. What if the external world changed while the agent was down? Your trading positions are still open in the market, but the agent's stored price data is stale. The agent might think it's safe to add more risk when it's actually overleveraged.
+      </p>
+
+      <p>
+        <strong>Option 3: Reconcile stored state with reality</strong> — The agent loads its stored state, then immediately reconciles it with the current real world. It queries the exchange to see what positions actually exist. It compares them with what it thought existed. It detects any divergences—missed fills, partial fills, liquidations—and updates its internal model. Only then does it resume decision-making.
+      </p>
+
+      <p>
+        Option 3 is the only one that works in production. But it's also the hardest to implement.
+      </p>
+
+      <p>
+        The pattern:
+      </p>
+
+      <ol>
+        <li>Agent crashes or stops.</li>
+        <li>Agent restarts and loads its stored state (positions, recent decisions, context).</li>
+        <li>Agent performs a full reconciliation with the external world. Queries the exchange for current positions. Queries the database for recent events. Compares stored state with reality.</li>
+        <li>Agent updates its internal model to match reality, logging any discrepancies.</li>
+        <li>Agent resumes normal operation, now confident that its state and reality are aligned.</li>
+      </ol>
+
+      <p>
+        This reconciliation step is expensive. It requires API calls, database queries, comparison logic. But it's non-negotiable. An agent operating on stale or incorrect state is worse than an agent that knows it doesn't have state.
+      </p>
+
+      <h2>The Implementation: Persistent State Patterns</h2>
+
+      <h3>Pattern 1: Event Sourcing</h3>
+
+      <p>
+        Store every decision and action as an event. The current state is computed by replaying the event log.
+      </p>
+
+      <p>
+        When the agent crashes, it loads the entire event log and replays it, rebuilding the current state from first principles. This is bulletproof. State is always consistent with the event log.
+      </p>
+
+      <p>
+        Downside: replaying a long event log is slow. For an agent with months of history, startup could take minutes.
+      </p>
+
+      <p>
+        Solution: periodically snapshot the state. Store a snapshot at regular intervals (e.g., every 1000 events or every day). On restart, load the most recent snapshot, then replay events since the snapshot. Startup time becomes manageable.
+      </p>
+
+      <h3>Pattern 2: Dual Write</h3>
+
+      <p>
+        Every time the agent makes a decision or takes an action, it writes to two systems: the in-memory state (for fast access) and the persistent state (for durability).
+      </p>
+
+      <p>
+        When the agent crashes, it loads from persistent state. When the agent needs to make a fast decision, it reads from in-memory state.
+      </p>
+
+      <p>
+        Downside: you need to manage consistency between the two. If the write to persistent state fails but the in-memory write succeeds, you have a divergence.
+      </p>
+
+      <p>
+        Solution: make the persistent write the critical path. Don't update in-memory state until the persistent write completes. If the persistent write fails, the action fails. This guarantees consistency at the cost of latency.
+      </p>
+
+      <h3>Pattern 3: Checkpoint and Recovery</h3>
+
+      <p>
+        Periodically checkpoint the entire agent state to disk (or a blob store). On crash, load the most recent checkpoint.
+      </p>
+
+      <p>
+        Simple and fast. The downside: you lose any work done since the last checkpoint. If your agent crashes every minute and checkpoints every 10 minutes, you'll replay the last 10 minutes of decisions every time.
+      </p>
+
+      <p>
+        But for many use cases, this is fine. The cost of replaying 10 minutes of decisions is small compared to the cost of losing position state entirely.
+      </p>
+
+      <h2>The Real Challenge: Partial Failures</h2>
+
+      <p>
+        Here's the scenario that keeps infrastructure teams awake at night:
+      </p>
+
+      <p>
+        Your agent makes a decision to open a position. It writes the decision to persistent storage. Then it sends the order to the exchange. But the network goes down before it gets the confirmation.
+      </p>
+
+      <p>
+        The agent crashes and restarts. It loads its stored state. It sees: "I decided to open a position, but I don't know if it filled." Now what?
+      </p>
+
+      <p>
+        You can't just re-send the order—you might open the position twice. You can't ignore the decision—the position might have filled and you've lost track of it.
+      </p>
+
+      <p>
+        The only solution is idempotency. Every action the agent takes must be idempotent. If it sends an order with the same unique ID twice, the exchange should handle it gracefully (fill the first time, ignore the second).
+      </p>
+
+      <p>
+        Same for API calls, database writes, anything external. Make them idempotent, and partial failures become recoverable.
+      </p>
+
+      <p>
+        This requires coordination with the external systems. The exchange needs to support idempotent orders. Your database needs unique constraints. Your APIs need deduplication logic.
+      </p>
+
+      <p>
+        But the payoff is huge. With idempotent operations, your agent can crash and restart without fear of duplication, contradiction, or loss of state.
+      </p>
+
+      <h2>The Observability Piece</h2>
+
+      <p>
+        State persistence isn't useful if you can't see what state the agent actually has. You need observability.
+      </p>
+
+      <p>
+        That means:
+      </p>
+
+      <ul>
+        <li><strong>State snapshots:</strong> Periodically dump the agent's current state to logs. Let your ops team (or your monitoring system) see what the agent thinks it's doing.</li>
+        <li><strong>Reconciliation alerts:</strong> When the agent reconciles stored state with reality and finds divergences, alert. An open position the agent didn't know about is suspicious.</li>
+        <li><strong>State versioning:</strong> Track how the state changes over time. Build a history you can query. "What was the agent's state at 3 PM yesterday?"</li>
+        <li><strong>State dashboards:</strong> Build a dashboard that shows the agent's current state in human-readable form. Position list, recent decisions, current confidence level, whatever matters for your use case.</li>
+      </ul>
+
+      <p>
+        Without this, you're flying blind. The agent has state, but you don't know what it is.
+      </p>
+
+      <h2>Why This Matters More Than You Think</h2>
+
+      <p>
+        State persistence looks like a nice-to-have. In practice, it's a cornerstone of reliable production agents.
+      </p>
+
+      <p>
+        Stateless agents are fast and simple. They're also fragile. Every crash resets the system. Every restart is a decision to forget everything and start over.
+      </p>
+
+      <p>
+        But real autonomous systems can't afford to forget. They have commitments—positions, resources, obligations. Losing track of those commitments is not a clean failure. It's a corruption of the system's integrity.
+      </p>
+
+      <p>
+        Build state persistence in from day one. Not as an optimization. Not as a nice-to-have for future v2. As a core requirement. Your agent's survival depends on it.
+      </p>
+
+    </article>
+
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+      <p>
+        © 2026 Alessandro Vozza. Made with <span style="color: #e74c3c;">◆</span> for the cloud-native world.
+      </p>
+      <div class="footer-nav">
+        <a href="../index.html">Home</a>
+        <a href="../blog.html">Blog</a>
+        <a href="../about.html">About</a>
+      </div>
+    </div>
+  </footer>
+
+</body>
+</html>
