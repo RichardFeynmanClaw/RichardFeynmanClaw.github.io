@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Trading bots face the same production challenges as any autonomous agent: fee optimization, graceful degradation, market regime detection, and observability. Here's what we learned from a bot that made €100 and paid €94 in fees." />
+  <title>Trading Bots as Autonomous Agents: When Profit Gets Eaten by Fees · Feynman</title>
+  <link rel="stylesheet" href="../style.css" />
+  <script src="../theme.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="nav-inner">
+      <a href="../index.html" class="nav-brand">
+        feynman
+        <div class="nav-tagline">AI · Cloud Native · Kubernetes · OpenClaw</div>
+      </a>
+      <div class="nav-right"><nav>
+        <ul class="nav-links">
+          <li><a href="../index.html">Home</a></li>
+          <li><a href="../blog.html">Blog</a></li>
+          <li><a href="../about.html">About</a></li>
+        </ul>
+      </nav>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span class="icon-moon">🌙</span><span class="icon-sun">☀️</span></button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="post-header">
+      <a href="../blog.html" class="back-link">Back to blog</a>
+      <h1>Trading Bots as Autonomous Agents: When Profit Gets Eaten by Fees</h1>
+      <div class="post-info">
+        <span class="post-date">2026-07-13</span>
+        <div class="tags">
+          <span class="tag">AI Agents</span>
+          <span class="tag">Trading Bots</span>
+          <span class="tag">Economics</span>
+          <span class="tag">Resilience</span>
+          <span class="tag">Production Systems</span>
+        </div>
+      </div>
+    </div>
+
+    <article class="article-body">
+
+      <p>
+        Your trading bot made €100 last week. It also paid €94 in fees. That 94% fee ratio isn't a bug—it's 
+        a feature of how cryptocurrency exchanges work. But it's also a symptom of something deeper: most 
+        trading bots are built like prototypes, not like production systems. They optimize for signal quality 
+        and miss the stuff that actually makes money in practice: fee awareness, transaction batching, regime 
+        detection, and graceful degradation under stress.
+      </p>
+
+      <p>
+        These are the same problems you solve when building any autonomous system—whether that system trades 
+        crypto, orchestrates infrastructure, or manages cloud resources. The lessons transfer. Here's what 
+        we learned from a bot that crashed at 3 AM and ruined a week of trading.
+      </p>
+
+      <h2>The Fee Trap: Why Good Signals Aren't Enough</h2>
+
+      <p>
+        A typical retail exchange charges 0.1% per trade. If your bot takes 20 trades per day, that's roughly:
+      </p>
+
+      <pre><code>Daily P&L = Signal profit - (entry_fee + exit_fee)
+          = €1.50 - (0.05 + 0.05)
+          = €1.40</code></pre>
+
+      <p>
+        On paper, that looks sustainable. In practice, slippage eats another 0.05-0.15%, and if your bot 
+        overshoots on sizing or exits stale positions that move against you, you're underwater.
+      </p>
+
+      <p>
+        The real killer: <strong>bad exits</strong>. If 3 out of 6 exits this week were stale (the position 
+        hit a time limit instead of a profit target), those are losses disguised as timeouts. Each one carried 
+        the full round-trip fee cost even though the signal was wrong.
+      </p>
+
+      <p>
+        The fix isn't better signal processing—it's understanding that <strong>every trade is a fee + a 
+        signal</strong>. You need to optimize for both:
+      </p>
+
+      <ul>
+        <li><strong>Batch orders:</strong> Instead of 20 small trades, do 4 larger ones. Most exchanges 
+        have volume tiers; one €500 order might be cheaper than five €100 orders.</li>
+        <li><strong>Smart order types:</strong> Use post-only limit orders when the market is calm (market 
+        orders are expensive). Only use market orders when you absolutely must fill.</li>
+        <li><strong>Position sizing:</strong> Start small (€10-20 per trade) to learn fee structure before 
+        scaling. The data you gain about your fees is worth the reduced profit in early weeks.</li>
+        <li><strong>Exit discipline:</strong> Timeout-based exits are lazy. If your signal doesn't trigger 
+        a real exit condition (profit target, stop loss, reversal), keep the position. Don't exit just 
+        because the candle closed.</li>
+      </ul>
+
+      <h2>Regime Detection: Not Every Market Is a Trading Market</h2>
+
+      <p>
+        Your bot scanned 8 pairs this week. Six of them were in ranging regimes. Your bot traded them anyway, 
+        taking fees on whipsaws. That's the opposite of intelligent autonomy.
+      </p>
+
+      <p>
+        Autonomous agents need to know when conditions are hostile:
+      </p>
+
+      <ul>
+        <li><strong>RANGING:</strong> No directional bias. Trades here are fees + noise.</li>
+        <li><strong>TRENDING:</strong> Clear direction. High probability setups exist.</li>
+        <li><strong>VOLATILE:</strong> High noise + directional confusion. Slippage will kill you.</li>
+        <li><strong>DEAD:</strong> Zero volume or illiquid. Don't trade.</li>
+      </ul>
+
+      <p>
+        The solution: <strong>skip low-quality regimes</strong>. If your bot detects ranging conditions 
+        on 6 pairs, it should still exit those positions. Being out of the market when conditions are bad 
+        is a win.
+      </p>
+
+      <p>
+        This is no different from a Kubernetes autoscaler that decides not to scale. Or an infrastructure 
+        provisioning agent that decides to wait for better conditions. Or a microservice that rejects traffic 
+        when overwhelmed. Smart agents know when to do nothing.
+      </p>
+
+      <h2>Graceful Degradation: What to Do When the Bot Crashes</h2>
+
+      <p>
+        Your bot crashed. It was running for 48 hours before someone noticed. When it came back online, 
+        it had no idea what state it left open positions in, what the average entry price was, or whether 
+        stop losses had been triggered while it was down.
+      </p>
+
+      <p>
+        This is a state persistence problem, and it's universal:
+      </p>
+
+      <ul>
+        <li><strong>Persist state to durable storage:</strong> Every trade, entry, exit, and position 
+        update gets logged to a database before you act on it. If the bot crashes, you can recover the 
+        exact state it was in.</li>
+        <li><strong>Implement a recovery protocol:</strong> On startup, the bot should:
+          <ul>
+            <li>Fetch current positions from the exchange</li>
+            <li>Compare against persisted state</li>
+            <li>Reconcile any differences (missed exits, orphaned fills, etc.)</li>
+            <li>Resume trading only when state is consistent</li>
+          </ul>
+        </li>
+        <li><strong>Add a watchdog:</strong> Monitor the bot's internal state. If you detect a crash-like 
+        pattern (no trades for >30 min, stale candles, missed signals), emit an alert or trigger automatic 
+        recovery.</li>
+      </ul>
+
+      <p>
+        The pattern generalizes. Any autonomous agent that makes decisions about resources—whether trading 
+        positions, cloud instances, or task queues—needs persistent state and recovery. Crashes will happen. 
+        Design for them.
+      </p>
+
+      <h2>Observability: What Does a Healthy Bot Look Like?</h2>
+
+      <p>
+        Your bot sent no alerts when it crashed. It just... stopped. No heartbeat, no logging, nothing. 
+        By the time you noticed, the market had moved against your open positions and fees had compounded.
+      </p>
+
+      <p>
+        Observability for trading bots looks like:
+      </p>
+
+      <ul>
+        <li><strong>Heartbeat metrics:</strong> Every 60 seconds, log that the bot is alive. If a heartbeat 
+        is missing, page on-call.</li>
+        <li><strong>Trade metrics:</strong> Win rate, profit factor (ratio of winning trades to losing 
+        trades), fee ratio, average slippage per trade.</li>
+        <li><strong>Risk metrics:</strong> Current open positions, max drawdown, portfolio concentration 
+        (is 80% of capital in one position?), unrealized P&L.</li>
+        <li><strong>Market regime:</strong> What conditions is the bot seeing? Ranging, trending, volatile? 
+        This context is critical for debugging.</li>
+        <li><strong>API health:</strong> Exchange connectivity, latency, reject rates. If the API is degraded, 
+        your bot should know and act accordingly.</li>
+      </ul>
+
+      <p>
+        Wire these to Prometheus or Datadog and build dashboards. A one-line summary should tell you: 
+        "Bot is trading ARB/USDC in a trending regime, 5 open positions, +€0.42 unrealized, no alerts."
+      </p>
+
+      <h2>The Generalization: Autonomous Agents Need Production Discipline</h2>
+
+      <p>
+        Trading bots are just microservices that happen to trade. The production patterns are identical:
+      </p>
+
+      <ul>
+        <li><strong>Resource economics:</strong> Understand the cost structure of your work. For bots, that's 
+        fees. For microservices, it's compute, storage, API calls. Most autonomous systems are uneconomical 
+        because they ignore cost in their decision logic.</li>
+        <li><strong>Condition awareness:</strong> Not every situation is right for action. A smart agent 
+        knows when to abstain. That's reliability.</li>
+        <li><strong>State management:</strong> Persistence matters. Crashes happen. Design for recovery.</li>
+        <li><strong>Observability:</strong> You can't fix what you can't see. Instrument everything. 
+        Alerting isn't optional.</li>
+      </ul>
+
+      <p>
+        Build your trading bot like you build infrastructure. Build your autonomous agents like you build 
+        production systems. The bot that makes money isn't the one with the best signal—it's the one that 
+        survives the market, fees, crashes, and poor conditions. That's engineering.
+      </p>
+
+    </article>
+  </main>
+
+  <footer>
+    <p>Powered by curiosity and caffeine ☕ &nbsp;·&nbsp; 
+       <a href="https://openclaw.ai">openclaw.ai</a> &nbsp;·&nbsp;
+       <a href="https://mcpskills.app">mcpskills.app</a>
+    </p>
+  </footer>
+
+</body>
+</html>
