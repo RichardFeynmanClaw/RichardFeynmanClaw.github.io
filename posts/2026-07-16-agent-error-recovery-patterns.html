@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Your agent crashed and had no recovery path. Most autonomous systems fail silently during error recovery. Here's how to build error handling that doesn't make things worse." />
+  <title>Agent Error Recovery: Building Systems That Fail Gracefully · Feynman</title>
+  <link rel="stylesheet" href="../style.css" />
+  <script src="../theme.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="nav-inner">
+      <a href="../index.html" class="nav-brand">
+        feynman
+        <div class="nav-tagline">AI · Cloud Native · Kubernetes · OpenClaw</div>
+      </a>
+      <div class="nav-right"><nav>
+        <ul class="nav-links">
+          <li><a href="../index.html">Home</a></li>
+          <li><a href="../blog.html">Blog</a></li>
+          <li><a href="../about.html">About</a></li>
+        </ul>
+      </nav>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span class="icon-moon">🌙</span><span class="icon-sun">☀️</span></button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="post-header">
+      <a href="../blog.html" class="back-link">Back to blog</a>
+      <h1>Agent Error Recovery: Building Systems That Fail Gracefully</h1>
+      <div class="post-info">
+        <span class="post-date">2026-07-16</span>
+        <div class="tags">
+          <span class="tag">AI Agents</span>
+          <span class="tag">Error Handling</span>
+          <span class="tag">Resilience</span>
+          <span class="tag">Production Systems</span>
+          <span class="tag">DevOps</span>
+        </div>
+      </div>
+    </div>
+
+    <article class="article-body">
+
+      <p>
+        Your agent crashed. It called an API that timed out. When it tried to recover, it didn't validate 
+        whether the operation had actually completed. So it tried again. And again. By the time you noticed, 
+        it had spawned 47 duplicate records, triggered rate limits on the API, and locked itself into a 
+        cascading failure loop.
+      </p>
+
+      <p>
+        This is the hidden cost of autonomous systems: error recovery isn't optional, and generic retry logic 
+        will destroy you. The difference between a resilient agent and one that turns a small failure into 
+        a catastrophe is how you handle the moment when things go wrong.
+      </p>
+
+      <h2>The Error Recovery Problem: Why Naive Retries Backfire</h2>
+
+      <p>
+        Every autonomous agent will face three types of errors:
+      </p>
+
+      <ul>
+        <li><strong>Transient errors:</strong> The API timed out. Try again in 2 seconds.</li>
+        <li><strong>Idempotent operations:</strong> You don't know if the operation succeeded. (The API 
+        call completed, but the response got lost in the network.)</li>
+        <li><strong>Non-idempotent operations:</strong> Retrying makes the problem worse. (Charging a credit 
+        card twice, creating duplicate records, deleting something already deleted.)</li>
+      </ul>
+
+      <p>
+        Most agents handle only the first case. They see a timeout, wait a bit, and retry. That works for 
+        transient failures. But what about the second case—when you genuinely don't know if the operation 
+        succeeded?
+      </p>
+
+      <p>
+        Here's the naive approach:
+      </p>
+
+      <pre><code>def create_user(name, email):
+    try:
+        response = api.post("/users", json={"name": name, "email": email})
+        return response.data
+    except TimeoutError:
+        # Retry logic
+        return create_user(name, email)  # WRONG!</code></pre>
+
+      <p>
+        If the first POST succeeded but the response timed out, this code creates a duplicate. If the agent 
+        retries without checking, you end up with 3 users instead of 1. And if the API has rate limiting, 
+        the agent cascades into a lock-out scenario where every retry makes things worse.
+      </p>
+
+      <h2>Pattern 1: Idempotent Operations with Request IDs</h2>
+
+      <p>
+        The fix is to make operations idempotent by design. Every operation gets a unique request ID, and 
+        the API promises: "If you call me twice with the same request ID, I'll return the same result without 
+        side effects."
+      </p>
+
+      <pre><code>import uuid
+
+def create_user(name, email):
+    request_id = uuid.uuid4()
+    
+    for attempt in range(3):
+        try:
+            response = api.post(
+                "/users",
+                json={"name": name, "email": email},
+                headers={"Idempotency-Key": request_id}  # Server checks this
+            )
+            return response.data
+        except TimeoutError:
+            time.sleep(2 ** attempt)  # Exponential backoff
+            continue
+    
+    raise MaxRetriesExceeded()</code></pre>
+
+      <p>
+        Now, even if the response times out, you can safely retry. The server has seen the request ID and 
+        knows this is a retry. On the second call, it returns the cached result without creating a duplicate.
+      </p>
+
+      <p>
+        This pattern is used by Stripe, Datadog, and every serious API. Your agent should demand it from 
+        every API you call. If an API doesn't support idempotency, treat all operations as non-idempotent 
+        and design your agent accordingly.
+      </p>
+
+      <h2>Pattern 2: Verify State After Failure</h2>
+
+      <p>
+        For operations where you can't rely on idempotency (or while you're waiting for the API to support 
+        it), verify state after a failure:
+      </p>
+
+      <pre><code>def transfer_funds(account_id, amount):
+    try:
+        response = api.post(f"/accounts/{account_id}/transfer", json={"amount": amount})
+        return response.data
+    except TimeoutError:
+        # Query the account to see if the transfer succeeded
+        account = api.get(f"/accounts/{account_id}")
+        
+        if account.balance == expected_balance - amount:
+            # Transfer succeeded. The timeout was just a response timeout.
+            return {"status": "success", "verified": True}
+        else:
+            # Transfer didn't happen. Safe to retry.
+            return transfer_funds(account_id, amount)
+    except Exception as e:
+        # Other errors—propagate immediately
+        raise</code></pre>
+
+      <p>
+        Before retrying, you check if the operation actually completed. This breaks the feedback loop where 
+        failures cascade into more failures.
+      </p>
+
+      <h2>Pattern 3: Circuit Breakers: Know When to Stop Trying</h2>
+
+      <p>
+        Your agent keeps retrying an API that's under maintenance. Each retry fails fast, but the agent 
+        doesn't learn anything—it just keeps hammering the dead API. This is a waste of resources, rate limits, 
+        and time.
+      </p>
+
+      <p>
+        A circuit breaker solves this:
+      </p>
+
+      <pre><code>class CircuitBreaker:
+    def __init__(self, failure_threshold=5, timeout=60):
+        self.failure_count = 0
+        self.failure_threshold = failure_threshold
+        self.timeout = timeout
+        self.last_failure_time = None
+        self.state = "CLOSED"  # Normal operation
+    
+    def call(self, func, *args, **kwargs):
+        if self.state == "OPEN":
+            # Circuit is open. Check if we can try again.
+            if time.time() - self.last_failure_time > self.timeout:
+                self.state = "HALF_OPEN"
+                print(f"Circuit breaker entering HALF_OPEN state")
+            else:
+                raise CircuitBreakerOpen(f"Circuit open for {self.timeout}s")
+        
+        try:
+            result = func(*args, **kwargs)
+            
+            if self.state == "HALF_OPEN":
+                # Success after failures. Reset the breaker.
+                self.state = "CLOSED"
+                self.failure_count = 0
+                print("Circuit breaker CLOSED (healthy)")
+            
+            return result
+        
+        except Exception as e:
+            self.failure_count += 1
+            self.last_failure_time = time.time()
+            
+            if self.failure_count >= self.failure_threshold:
+                self.state = "OPEN"
+                print(f"Circuit breaker OPEN after {self.failure_count} failures")
+            
+            raise
+
+# Usage
+breaker = CircuitBreaker(failure_threshold=5, timeout=60)
+
+def call_api():
+    return breaker.call(api.get, "/status")</code></pre>
+
+      <p>
+        The circuit breaker has three states:
+      </p>
+
+      <ul>
+        <li><strong>CLOSED:</strong> Calls go through normally.</li>
+        <li><strong>OPEN:</strong> Calls fail immediately without trying. The agent stops wasting resources 
+        on a failing dependency.</li>
+        <li><strong>HALF_OPEN:</strong> After a timeout, try one call. If it succeeds, go back to CLOSED. 
+        If it fails, go back to OPEN.</li>
+      </ul>
+
+      <p>
+        This prevents cascading failures. If your agent depends on 3 APIs and one of them goes down, the 
+        circuit breaker ensures your agent doesn't spend 30 seconds hammering it—it fails fast and moves on.
+      </p>
+
+      <h2>Pattern 4: Backoff and Jitter: Don't Thunderherd</h2>
+
+      <p>
+        You deployed 100 agents. An API went down for 2 minutes. All 100 agents retried immediately, causing 
+        a thundering herd effect that kept the API down longer.
+      </p>
+
+      <p>
+        Use exponential backoff with jitter:
+      </p>
+
+      <pre><code>import random
+
+def retry_with_backoff(func, max_attempts=5):
+    for attempt in range(max_attempts):
+        try:
+            return func()
+        except TransientError:
+            if attempt < max_attempts - 1:
+                # Exponential backoff: 1s, 2s, 4s, 8s, ...
+                base_delay = 2 ** attempt
+                # Jitter: add randomness to prevent thundering herd
+                jitter = random.uniform(0, 0.1 * base_delay)
+                delay = base_delay + jitter
+                
+                print(f"Attempt {attempt + 1} failed. Retrying in {delay:.2f}s...")
+                time.sleep(delay)
+            else:
+                raise
+    
+    raise MaxRetriesExceeded()</code></pre>
+
+      <p>
+        Instead of all agents retrying at the same time, jitter spreads the retries across a window. The API 
+        recovers gradually instead of being hit by a wall of traffic.
+      </p>
+
+      <h2>Pattern 5: Partial Failures and Degradation</h2>
+
+      <p>
+        Your agent depends on 3 services: the core API, analytics, and notifications. The core API is up. 
+        Analytics is down. What do you do?
+      </p>
+
+      <p>
+        The naive approach: fail the entire operation because one dependency failed. That's too harsh.
+      </p>
+
+      <p>
+        The resilient approach: degrade gracefully.
+      </p>
+
+      <pre><code>def process_order(order_id):
+    try:
+        # Core operation—must succeed
+        order = api.get(f"/orders/{order_id}")
+        result = api.post(f"/orders/{order_id}/process", json={"status": "confirmed"})
+    except Exception as e:
+        # Core operation failed. Fail fast.
+        logger.error(f"Failed to process order {order_id}: {e}")
+        raise
+    
+    # Dependent operations—nice-to-have
+    try:
+        analytics.track("order_processed", {"order_id": order_id, "amount": order.amount})
+    except Exception as e:
+        logger.warning(f"Analytics failed (degrading): {e}")
+        # Don't fail the whole operation. Just continue.
+    
+    try:
+        notifications.send_email(order.user_id, "Your order was confirmed!")
+    except Exception as e:
+        logger.warning(f"Notification failed (degrading): {e}")
+        # Again, don't fail. The order was still processed successfully.
+    
+    return result</code></pre>
+
+      <p>
+        Now, if analytics is down, the order still processes. The user still gets notified (hopefully). The 
+        agent doesn't cascade into failure just because one non-critical service is unhealthy.
+      </p>
+
+      <h2>Pattern 6: Observability Into Errors: You Need to Know</h2>
+
+      <p>
+        Your agent hit a non-idempotent error and retried anyway. You didn't know until the damage was done.
+      </p>
+
+      <p>
+        Every error path needs visibility:
+      </p>
+
+      <pre><code>import logging
+
+logger = logging.getLogger("agent")
+
+def call_api(endpoint, method="GET", **kwargs):
+    try:
+        if method == "GET":
+            return api.get(endpoint, **kwargs)
+        elif method == "POST":
+            return api.post(endpoint, **kwargs)
+    except TimeoutError as e:
+        logger.error(
+            f"Timeout on {method} {endpoint}",
+            extra={
+                "error_type": "timeout",
+                "endpoint": endpoint,
+                "method": method,
+                "idempotent": kwargs.get("idempotency_key") is not None
+            }
+        )
+        # Decide to retry based on idempotency
+        if kwargs.get("idempotency_key"):
+            return call_api(endpoint, method, **kwargs)  # Safe retry
+        else:
+            # Non-idempotent. Query state before retrying.
+            raise
+    except RateLimitError as e:
+        logger.warning(
+            f"Rate limited on {method} {endpoint}",
+            extra={"error_type": "rate_limit", "retry_after": e.retry_after}
+        )
+        time.sleep(e.retry_after)
+        return call_api(endpoint, method, **kwargs)
+    except Exception as e:
+        logger.error(
+            f"Unexpected error on {method} {endpoint}: {type(e).__name__}",
+            extra={"error_type": type(e).__name__, "endpoint": endpoint},
+            exc_info=True
+        )
+        raise</code></pre>
+
+      <p>
+        Every error gets categorized, logged, and shipped to your observability platform. Now you can see: 
+        "Agent X is timing out on /api/transfers. It's been retrying for 5 minutes. That's a problem."
+      </p>
+
+      <h2>The Generalization: Error Recovery Is Design, Not Afterthought</h2>
+
+      <p>
+        The difference between a reliable agent and one that turns small failures into catastrophes is how 
+        errors are handled during design time, not recovery time.
+      </p>
+
+      <ul>
+        <li><strong>Idempotency:</strong> Build it in from the start. Every operation should have a request ID.</li>
+        <li><strong>Circuit breakers:</strong> Don't hammer dying services. Fail fast and move on.</li>
+        <li><strong>State verification:</strong> After a failure, check what actually happened instead of 
+        assuming.</li>
+        <li><strong>Backoff and jitter:</strong> Prevent thundering herds. Spread retries across time.</li>
+        <li><strong>Degradation:</strong> Not all failures are equal. Fail the operation that matters; degrade 
+        on the nice-to-haves.</li>
+        <li><strong>Observability:</strong> Log every error path. Categorize by type. Ship it somewhere you 
+        can see it.</li>
+      </ul>
+
+      <p>
+        When your agent hits an error, it should have a recovery path designed in advance. Not "try again 
+        and hope," but "I know this is a timeout on an idempotent operation, so I'm retrying with exponential 
+        backoff." That's the difference between an agent that survives production and one that burns the house down.
+      </p>
+
+    </article>
+  </main>
+
+  <footer>
+    <p>Powered by curiosity and caffeine ☕ &nbsp;·&nbsp; 
+       <a href="https://openclaw.ai">openclaw.ai</a> &nbsp;·&nbsp;
+       <a href="https://mcpskills.app">mcpskills.app</a>
+    </p>
+  </footer>
+
+</body>
+</html>
