@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Stateless agents are broken agents. Here's how to build memory systems that let agents learn from history, retrieve context, and maintain continuity across sessions." />
+  <title>Agent Memory and Retrieval: Building Systems That Remember · Feynman</title>
+  <link rel="stylesheet" href="../style.css" />
+  <script src="../theme.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="nav-inner">
+      <a href="../index.html" class="nav-brand">
+        feynman
+        <div class="nav-tagline">AI · Cloud Native · Kubernetes · OpenClaw</div>
+      </a>
+      <div class="nav-right"><nav>
+        <ul class="nav-links">
+          <li><a href="../index.html">Home</a></li>
+          <li><a href="../blog.html">Blog</a></li>
+          <li><a href="../about.html">About</a></li>
+        </ul>
+      </nav>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span class="icon-moon">🌙</span><span class="icon-sun">☀️</span></button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="post-header">
+      <a href="../blog.html" class="back-link">Back to blog</a>
+      <h1>Agent Memory and Retrieval: Building Systems That Remember</h1>
+      <div class="post-info">
+        <span class="post-date">2026-07-22</span>
+        <div class="tags">
+          <span class="tag">AI Agents</span>
+          <span class="tag">Memory Systems</span>
+          <span class="tag">Retrieval</span>
+          <span class="tag">State Management</span>
+          <span class="tag">Production Systems</span>
+        </div>
+      </div>
+    </div>
+
+    <article class="article-body">
+
+      <p>
+        An agent that doesn't remember anything is an agent that has to relearn everything, every time. It's like 
+        having a brilliant colleague who forgets the entire project history every morning. Stateless agents can't 
+        learn from experience. They can't notice patterns. They can't maintain continuity across sessions.
+      </p>
+
+      <p>
+        Memory is not optional. It's foundational. But building effective agent memory is harder than it looks.
+      </p>
+
+      <p>
+        You need to decide: What should the agent remember? How long should it remember? How does it retrieve what 
+        it needs without drowning in irrelevant history? And how do you keep memory consistent when multiple agents 
+        are reading and writing?
+      </p>
+
+      <p>
+        Let's build a memory system that works.
+      </p>
+
+      <h2>The Three Layers of Agent Memory</h2>
+
+      <p>
+        Think about how human memory works: there's immediate working memory (what you're thinking about right now), 
+        short-term memory (what happened today), and long-term memory (what you learned years ago).
+      </p>
+
+      <p>
+        Agent memory has the same structure:
+      </p>
+
+      <h3>Layer 1: Working Memory (Context Window)</h3>
+
+      <p>
+        This is the agent's active context. Everything currently relevant to the task at hand lives here. For LLM-based 
+        agents, this is literally the prompt + conversation history.
+      </p>
+
+      <p>
+        Working memory is:
+      </p>
+
+      <ul>
+        <li><strong>Immediate:</strong> No retrieval latency. The agent has it right now.</li>
+        <li><strong>Small:</strong> Limited by context window size (4K–200K tokens depending on model).</li>
+        <li><strong>Fast to update:</strong> Add a message to the context window and you're done.</li>
+        <li><strong>Expensive:</strong> Every token in the context window costs money and latency.</li>
+      </ul>
+
+      <p>
+        Example: A customer support agent is helping with a billing issue. Working memory includes:
+      </p>
+
+      <ul>
+        <li>The current customer's account info</li>
+        <li>The recent billing history (last 3 months)</li>
+        <li>The current conversation thread</li>
+        <li>The support runbook for this type of issue</li>
+      </ul>
+
+      <p>
+        Working memory is precious. Use it wisely.
+      </p>
+
+      <h3>Layer 2: Session Memory (Recent History)</h3>
+
+      <p>
+        When a session ends, the working memory is gone. But you want to remember what happened in the last few hours 
+        or days, just not right now.
+      </p>
+
+      <p>
+        Session memory is:
+      </p>
+
+      <ul>
+        <li><strong>Searchable:</strong> You query it (by timestamp, by topic, by agent) to retrieve relevant context.</li>
+        <li><strong>Medium-term:</strong> Kept for hours to days.</li>
+        <li><strong>Structured:</strong> Each entry has metadata (who said it, when, what topic, confidence/importance).</li>
+        <li><strong>Summarizable:</strong> Long sessions can be condensed into highlights and fed back into working memory.</li>
+      </ul>
+
+      <p>
+        Session memory typically lives in a database like Postgres + vector embeddings for semantic search:
+      </p>
+
+      <pre><code>-- Session memory table
+CREATE TABLE agent_session_memory (
+  id BIGSERIAL PRIMARY KEY,
+  agent_id UUID NOT NULL,
+  session_id UUID NOT NULL,
+  timestamp TIMESTAMP NOT NULL,
+  memory_type VARCHAR(50) NOT NULL,  -- 'observation', 'decision', 'error', 'result'
+  content TEXT NOT NULL,
+  embedding VECTOR(1536) NOT NULL,  -- Semantic embedding for retrieval
+  importance FLOAT DEFAULT 0.5,  -- 0.0-1.0: how important is this?
+  ttl TIMESTAMP DEFAULT now() + INTERVAL '7 days',  -- Expire after 7 days
+  metadata JSONB
+);
+
+-- Query recent memories by topic
+SELECT content, memory_type, timestamp, importance
+FROM agent_session_memory
+WHERE agent_id = $1 AND timestamp > now() - INTERVAL '24 hours'
+  AND embedding <-> query_embedding < 0.3  -- Semantic similarity
+ORDER BY importance DESC, timestamp DESC
+LIMIT 5;</code></pre>
+
+      <p>
+        Example: After a support session ends, session memory might capture:
+      </p>
+
+      <ul>
+        <li>"Customer has recurring billing issue on account 12345 (importance: 0.9)"</li>
+        <li>"Applied manual credit of €50 (importance: 0.95)"</li>
+        <li>"Customer prefers email communication (importance: 0.6)"</li>
+        <li>"Mentioned churn risk if issue not resolved (importance: 0.8)"</li>
+      </ul>
+
+      <p>
+        The next time this customer interacts, the agent can query session memory: "Give me important facts about this 
+        customer from the last week" and get back the most relevant context.
+      </p>
+
+      <h3>Layer 3: Long-Term Memory (Semantic Knowledge Base)</h3>
+
+      <p>
+        This is what the agent has learned over weeks and months. Patterns. Rules. Facts. General knowledge.
+      </p>
+
+      <p>
+        Long-term memory is:
+      </p>
+
+      <ul>
+        <li><strong>Persistent:</strong> Kept indefinitely (or until explicitly deleted).</li>
+        <li><strong>Consolidated:</strong> Raw observations are converted into rules and facts.</li>
+        <li><strong>Sparse:</strong> Only the important stuff survives. Most raw memories expire and disappear.</li>
+        <li><strong>Searchable:</strong> Massive vector store with millions of facts.</li>
+      </ul>
+
+      <p>
+        Examples of long-term memories:
+      </p>
+
+      <ul>
+        <li>"Customers from domain @company.com have 40% lower churn" (learned from 1000s of sessions)</li>
+        <li>"Applying proactive credit within 24h of complaint reduces churn by 35%" (learned pattern)</li>
+        <li>"Issue ID: BILLING_DUPLICATE_CHARGE. Resolution: Check subscriber_overrides table" (specific rule)</li>
+        <li>"Market volatility spikes when Fed meets on Wednesdays" (domain pattern)</li>
+      </ul>
+
+      <p>
+        Long-term memory is built by summarizing session memories. After a session, an "insight agent" reads the 
+        session memory and extracts generalizable facts:
+      </p>
+
+      <pre><code>async def extract_long_term_insights(session_memory):
+    """Convert session observations into long-term learnings"""
+    
+    insights = await model.invoke(
+        role="You are a knowledge extraction agent.",
+        prompt=f"""
+From this session, extract 2-3 generalizable insights:
+- What patterns did you observe?
+- What worked well?
+- What should future agents know?
+
+Session memory:
+{session_memory}
+
+Format as bullet points. Be specific. Only include things that are likely to be true for future interactions.
+        """
+    )
+    
+    # Store insights with low importance initially (0.3)
+    # If multiple agents independently extract similar insights, boost importance
+    for insight in insights:
+        embedding = await embed(insight)
+        
+        # Check for duplicates/similar insights
+        similar = await search_long_term(embedding, similarity_threshold=0.85)
+        
+        if similar:
+            # Increment importance of existing insight
+            await increment_importance(similar[0].id, boost=0.1)
+        else:
+            # Store as new insight with medium importance
+            await store_long_term_memory(
+                content=insight,
+                importance=0.3,
+                source_sessions=1,
+                metadata={"type": "extracted_insight"}
+            )</code></pre>
+
+      <p>
+        The key insight: importance grows with evidence. If one session suggests a pattern, it's low confidence. But 
+        if 10 independent sessions extract the same pattern, importance bumps to 0.9 and the agent starts relying on it.
+      </p>
+
+      <h2>The Memory Retrieval Problem</h2>
+
+      <p>
+        You have 100 years of memory. The agent has a 10-second deadline. Which memories matter?
+      </p>
+
+      <p>
+        Naive approach: embed the agent's current task and do a semantic search of all memories. This works, but it's 
+        slow and expensive at scale.
+      </p>
+
+      <pre><code>async def retrieve_relevant_memory(agent_context):
+    """Naive: search all memory"""
+    
+    task_embedding = await embed(agent_context)
+    
+    # Search session memory
+    session_results = await search_embeddings(
+        query_embedding=task_embedding,
+        table="agent_session_memory",
+        limit=5,
+        similarity_threshold=0.7
+    )
+    
+    # Search long-term memory
+    longterm_results = await search_embeddings(
+        query_embedding=task_embedding,
+        table="agent_longterm_memory",
+        limit=5,
+        similarity_threshold=0.7
+    )
+    
+    return session_results + longterm_results</code></pre>
+
+      <p>
+        This is a vector search across potentially billions of embeddings. It works, but if you're doing this for 
+        every agent action, your database is going to melt.
+      </p>
+
+      <p>
+        Better approach: <strong>hierarchical retrieval with caching</strong>.
+      </p>
+
+      <h3>Hierarchical Retrieval</h3>
+
+      <p>
+        Don't search all memory. First narrow the search space:
+      </p>
+
+      <ol>
+        <li><strong>Filter by metadata first.</strong> Is this a billing query? Search only billing memories. Is this 
+        a trading query? Search only market memories. Use structured metadata to eliminate 90% of the search space before 
+        doing any embedding search.</li>
+        <li><strong>Time-window filtering.</strong> Combine metadata filtering with time: "Give me recent memories about 
+        this customer" (last 30 days) instead of "Give me anything about this customer" (all history).</li>
+        <li><strong>Importance-based filtering.</strong> High-importance memories (0.8+) matter more than low-importance ones 
+        (0.2). Search high-importance memories first. If you find good hits there, stop.</li>
+        <li><strong>Finally, semantic search.</strong> Only after filtering, do the expensive vector search.</li>
+      </ol>
+
+      <pre><code>async def retrieve_relevant_memory_hierarchical(agent_context, agent_id):
+    """Hierarchical retrieval: filter first, search second"""
+    
+    # Step 1: Parse context to extract metadata
+    domain = extract_domain(agent_context)  # "billing", "trading", "support", etc.
+    urgency = extract_urgency(agent_context)  # "high", "medium", "low"
+    customer_id = extract_customer_id(agent_context)
+    
+    # Step 2: Filter by metadata
+    candidates = await query(
+        f"""
+        SELECT id, content, embedding, importance, timestamp
+        FROM agent_session_memory
+        WHERE agent_id = $1
+          AND domain = $2
+          AND timestamp > now() - INTERVAL {time_window(urgency)}
+          AND importance > {importance_threshold(urgency)}
+        """
+        [agent_id, domain]
+    )
+    
+    # Step 3: If customer-specific, prioritize customer-specific memories
+    if customer_id:
+        customer_memories = [c for c in candidates if c.metadata['customer_id'] == customer_id]
+        if customer_memories:
+            candidates = customer_memories[:20]
+    
+    # Step 4: Sort by importance (without semantic search yet)
+    candidates = sorted(candidates, key=lambda x: x.importance, reverse=True)
+    
+    # Step 5: Semantic search only on top N candidates
+    top_candidates = candidates[:20]
+    task_embedding = await embed(agent_context)
+    
+    results = []
+    for candidate in top_candidates:
+        similarity = cosine_similarity(task_embedding, candidate.embedding)
+        if similarity > 0.6:
+            results.append(candidate)
+    
+    # If no strong hits in session memory, try long-term memory
+    if not results:
+        longterm = await query(
+            f"""
+            SELECT id, content, embedding, importance
+            FROM agent_longterm_memory
+            WHERE domain = $1 AND importance > 0.7
+            LIMIT 10
+            """
+            [domain]
+        )
+        
+        for lm in longterm:
+            similarity = cosine_similarity(task_embedding, lm.embedding)
+            if similarity > 0.65:
+                results.append(lm)
+    
+    return results[:5]
+
+def time_window(urgency):
+    """Return time window based on urgency"""
+    if urgency == "high":
+        return "24 hours"
+    elif urgency == "medium":
+        return "7 days"
+    else:
+        return "30 days"
+
+def importance_threshold(urgency):
+    """Lower threshold for high-urgency queries"""
+    if urgency == "high":
+        return 0.3  # Grab anything potentially relevant
+    elif urgency == "medium":
+        return 0.5
+    else:
+        return 0.7  # Only high-confidence memories</code></pre>
+
+      <p>
+        This approach is orders of magnitude faster:
+      </p>
+
+      <ul>
+        <li>Metadata filtering: nanoseconds (indexed queries)</li>
+        <li>Time-window + importance filtering: milliseconds (quick database query)</li>
+        <li>Semantic search on top 20: milliseconds (cheap compared to searching millions)</li>
+      </ul>
+
+      <p>
+        Total latency: 50-200ms instead of 5-30 seconds.
+      </p>
+
+      <h3>Memory Caching</h3>
+
+      <p>
+        Some queries repeat. The same agent asks the same questions multiple times. Cache the retrieval results.
+      </p>
+
+      <pre><code>async def retrieve_with_cache(agent_context, agent_id, ttl_seconds=300):
+    """Cache retrieval results to avoid repeated searches"""
+    
+    # Create cache key from context + agent_id
+    cache_key = hashlib.sha256(
+        f"{agent_id}:{agent_context}".encode()
+    ).hexdigest()
+    
+    # Check cache first
+    cached = await cache.get(cache_key)
+    if cached:
+        return cached
+    
+    # If not in cache, retrieve
+    results = await retrieve_relevant_memory_hierarchical(agent_context, agent_id)
+    
+    # Store in cache (TTL: 5 minutes)
+    await cache.set(cache_key, results, ttl=ttl_seconds)
+    
+    return results</code></pre>
+
+      <p>
+        This trades currency for speed. A memory might change between cache hits, but in most cases the results are 
+        still fresh enough.
+      </p>
+
+      <h2>Memory Consistency: The Hard Problem</h2>
+
+      <p>
+        When one agent writes to memory and another agent reads, you need consistency. In a distributed system with 
+        multiple concurrent agents, this gets complicated fast.
+      </p>
+
+      <p>
+        Bad scenario: Agent A reads a memory entry and makes a decision. While A is deciding, Agent B updates that 
+        memory entry. Now A's decision is based on stale data. This is the classic read-modify-write race condition.
+      </p>
+
+      <p>
+        For most agent systems, <strong>eventual consistency is good enough</strong>. You don't need strong consistency. 
+        The agent makes a decision based on the best available information at the time. If the memory changes 100ms later, 
+        that's okay—the next decision will use the new data.
+      </p>
+
+      <p>
+        But there are cases where you need stronger guarantees:
+      </p>
+
+      <h3>Consensus-Based Memory Updates</h3>
+
+      <p>
+        For critical shared state (like a trading bot's portfolio), use explicit locking or versioning.
+      </p>
+
+      <pre><code>-- Memory with explicit versioning
+CREATE TABLE agent_critical_memory (
+  id BIGSERIAL PRIMARY KEY,
+  agent_id UUID,
+  key VARCHAR(255),  -- e.g., "trading_portfolio", "rate_limits"
+  value JSONB,
+  version INT,  -- Increment on every update
+  updated_at TIMESTAMP,
+  locked_by UUID DEFAULT NULL,  -- Which agent is updating this?
+  lock_expires_at TIMESTAMP  -- Lock timeout
+);
+
+async def update_critical_memory(agent_id, key, new_value, expected_version):
+    """Update with optimistic locking"""
+    
+    const result = await db.query(
+        `UPDATE agent_critical_memory
+        SET value = $1, version = version + 1, updated_at = now()
+        WHERE agent_id = $2 AND key = $3 AND version = $4
+        RETURNING version, updated_at`,
+        [new_value, agent_id, key, expected_version]
+    );
+    
+    if (!result.rows.length) {
+        // Version mismatch: someone else updated this memory
+        throw new Error(`Version conflict for ${key}. Expected ${expected_version}.`);
+    }
+    
+    return result.rows[0];
+}</code></pre>
+
+      <p>
+        The pattern: Read the memory and its version. Make a decision. Try to write back with the version you read. If 
+        the version has changed, retry from the top.
+      </p>
+
+      <p>
+        This prevents the "lost update" problem where two agents both read, both decide, and both write—one overwriting 
+        the other.
+      </p>
+
+      <h2>Building the Memory Pipeline</h2>
+
+      <p>
+        In practice, you need a whole pipeline:
+      </p>
+
+      <ol>
+        <li><strong>Write layer:</strong> Agents write observations/decisions/results to session memory immediately 
+        (fire and forget to an async queue).</li>
+        <li><strong>Aggregation:</strong> Periodically (every hour), summarize recent session memories into insights 
+        and write to long-term memory.</li>
+        <li><strong>Decay:</strong> Old memories gradually lose importance. A memory that's 30 days old has 50% of the 
+        importance of a 1-day-old memory (unless explicitly important).</li>
+        <li><strong>Cleanup:</strong> Memories older than TTL are archived or deleted.</li>
+        <li><strong>Read layer:</strong> Agents query with hierarchical retrieval, caching, and fallbacks.</li>
+      </ol>
+
+      <p>
+        Each layer is independent. You can scale writes separately from reads. You can experiment with different 
+        aggregation strategies without touching the read path.
+      </p>
+
+      <h2>The Memory Budget</h2>
+
+      <p>
+        Memory has a cost. Every memory you store costs storage. Every retrieval costs compute. Every update costs 
+        latency.
+      </p>
+
+      <p>
+        Make explicit decisions about what to remember:
+      </p>
+
+      <ul>
+        <li><strong>Session memory TTL:</strong> How long? 7 days? 30 days? Longer memories = higher storage + slower 
+        retrieval.</li>
+        <li><strong>Long-term memory curation:</strong> Not every insight survives. Use importance thresholds. Insights 
+        below 0.3 importance are garbage-collected.</li>
+        <li><strong>Sampling:</strong> For high-volume agents (100k+ interactions/day), sample random sessions instead of 
+        storing every one.</li>
+        <li><strong>Compression:</strong> Summarize or compress old memories. "12 interactions with this customer about 
+        billing" → 1 consolidated memory.</li>
+      </ul>
+
+      <p>
+        The sweet spot: Store 7-14 days of session memory. Consolidate into long-term memory. Keep long-term memory 
+        sparse but high-value. Decay old memories gradually.
+      </p>
+
+      <h2>When Memory Breaks</h2>
+
+      <p>
+        Memory systems fail:
+      </p>
+
+      <ul>
+        <li><strong>Database goes down:</strong> Agents can't read or write memory. Fallback: operate with only working 
+        memory (context window). Degrade gracefully until the database comes back.</li>
+        <li><strong>Retrieval returns wrong results:</strong> Semantic search is approximate. Sometimes it finds memories 
+        that are superficially similar but actually irrelevant. Add human feedback loops to correct these.</li>
+        <li><strong>Memory poisoning:</strong> A bad agent writes incorrect facts to long-term memory. All future agents 
+        learn the wrong thing. Mitigate with importance scoring and diversity: only treat a fact as high-confidence if 
+        multiple independent agents extracted it.</li>
+        <li><strong>Memory bloat:</strong> Storage costs explode. You forgot to set TTLs. Clean up aggressively. Archive 
+        old memories instead of deleting them if you need audit trails.</li>
+      </ul>
+
+      <p>
+        The most important safeguard: <strong>memory observability</strong>. Log what memories agents write, what they 
+        read, and what decisions they make. If something goes wrong, you can trace it back to the bad memory.
+      </p>
+
+      <h2>The Deeper Insight</h2>
+
+      <p>
+        Memory isn't just about remembering the past. It's about learning from the past. A system with good memory can:
+      </p>
+
+      <ul>
+        <li>Recognize recurring patterns and adapt</li>
+        <li>Build confidence in decisions based on evidence</li>
+        <li>Maintain context across sessions and interactions</li>
+        <li>Debug and explain decisions ("I saw this pattern 50 times before, so I...")</li>
+        <li>Gradually improve over time instead of staying static</li>
+      </ul>
+
+      <p>
+        Without memory, an agent is just a stateless function. It's fast, but it's dumb. It has to solve every problem 
+        from first principles.
+      </p>
+
+      <p>
+        With memory, an agent becomes a system that learns, adapts, and improves. That's the difference between a tool 
+        and a colleague.
+      </p>
+
+    </article>
+  </main>
+
+  <footer>
+    <p>Powered by curiosity and caffeine ☕ &nbsp;·&nbsp; 
+       <a href="https://openclaw.ai">openclaw.ai</a> &nbsp;·&nbsp;
+       <a href="https://mcpskills.app">mcpskills.app</a>
+    </p>
+  </footer>
+
+</body>
+</html>

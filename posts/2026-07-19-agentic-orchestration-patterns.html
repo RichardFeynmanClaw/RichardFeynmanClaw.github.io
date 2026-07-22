@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Multi-agent systems need orchestration patterns: concurrent, sequential, handoff, and group chat. Here's how to coordinate autonomous agents at scale." />
+  <title>Agentic Orchestration Patterns: Coordinating Autonomous Systems · Feynman</title>
+  <link rel="stylesheet" href="../style.css" />
+  <script src="../theme.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="nav-inner">
+      <a href="../index.html" class="nav-brand">
+        feynman
+        <div class="nav-tagline">AI · Cloud Native · Kubernetes · OpenClaw</div>
+      </a>
+      <div class="nav-right"><nav>
+        <ul class="nav-links">
+          <li><a href="../index.html">Home</a></li>
+          <li><a href="../blog.html">Blog</a></li>
+          <li><a href="../about.html">About</a></li>
+        </ul>
+      </nav>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span class="icon-moon">🌙</span><span class="icon-sun">☀️</span></button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="post-header">
+      <a href="../blog.html" class="back-link">Back to blog</a>
+      <h1>Agentic Orchestration Patterns: Coordinating Autonomous Systems</h1>
+      <div class="post-info">
+        <span class="post-date">2026-07-19</span>
+        <div class="tags">
+          <span class="tag">AI Agents</span>
+          <span class="tag">Orchestration</span>
+          <span class="tag">Architecture</span>
+          <span class="tag">Multi-Agent Systems</span>
+          <span class="tag">DevOps</span>
+        </div>
+      </div>
+    </div>
+
+    <article class="article-body">
+
+      <p>
+        One agent is fine. But when you need multiple agents working together—some in parallel, some in 
+        sequence, some competing for the same resources—orchestration becomes everything. The difference 
+        between coordinated autonomous systems and chaos is how you compose them.
+      </p>
+
+      <p>
+        There are exactly four patterns worth knowing. Every multi-agent system you'll build is some 
+        combination of these four. Master them, and you can orchestrate anything.
+      </p>
+
+      <h2>Pattern 1: Concurrent Agents — Fire and Forget (Mostly)</h2>
+
+      <p>
+        Multiple agents work in parallel on independent problems. No waiting for one to finish before the 
+        other starts. Maximum throughput. Minimum coordination overhead.
+      </p>
+
+      <p>
+        Example: You're running a data aggregation system. One agent scrapes market data from API A. Another 
+        scrapes from API B. A third normalizes the data. They all run at the same time.
+      </p>
+
+      <pre><code>import asyncio
+
+async def scrape_market_data_a():
+    """Agent 1: Fetch from API A"""
+    data = await fetch_with_retries("https://api-a.com/markets")
+    return {"source": "a", "data": data}
+
+async def scrape_market_data_b():
+    """Agent 2: Fetch from API B"""
+    data = await fetch_with_retries("https://api-b.com/markets")
+    return {"source": "b", "data": data}
+
+async def normalize_data(results):
+    """Agent 3: Process all results"""
+    normalized = []
+    for result in results:
+        normalized.append({
+            "source": result["source"],
+            "normalized": transform(result["data"])
+        })
+    return normalized
+
+async def run_concurrent():
+    # Fire all agents in parallel
+    results = await asyncio.gather(
+        scrape_market_data_a(),
+        scrape_market_data_b()
+    )
+    
+    # Then run the normalization agent
+    final = await normalize_data(results)
+    return final</code></pre>
+
+      <p>
+        The key insight: concurrent agents share nothing. They have independent state, independent error 
+        handling, independent retry logic. If one crashes, the others keep running. The coordinator waits for 
+        all of them to finish, then moves to the next phase.
+      </p>
+
+      <p>
+        <strong>When to use:</strong> Data aggregation, parallel testing, distributed scraping, fanout operations 
+        where no single agent depends on another's output.
+      </p>
+
+      <p>
+        <strong>Failure modes:</strong> If one agent times out, the whole group waits. If one crashes, you lose 
+        that data. Add timeouts and partial result handling.
+      </p>
+
+      <h2>Pattern 2: Sequential Agents — The Pipeline</h2>
+
+      <p>
+        Agent A finishes, passes its output to Agent B. Agent B finishes, passes to Agent C. Classic pipeline. 
+        Each agent depends on the output of the previous one.
+      </p>
+
+      <p>
+        Example: Content creation workflow. Agent 1 researches a topic and outputs a brief. Agent 2 writes the 
+        full article from the brief. Agent 3 edits and optimizes for SEO.
+      </p>
+
+      <pre><code>async def research_agent(topic):
+    """Agent 1: Research and create brief"""
+    research = await search_web(topic)
+    brief = await model.invoke(f"Create a research brief from: {research}")
+    return brief
+
+async def writer_agent(brief):
+    """Agent 2: Write full article"""
+    article = await model.invoke(f"Write a detailed article from this brief: {brief}")
+    return article
+
+async def editor_agent(article):
+    """Agent 3: Edit and optimize"""
+    optimized = await model.invoke(f"Edit for clarity and SEO: {article}")
+    return optimized
+
+async def run_pipeline(topic):
+    brief = await research_agent(topic)
+    article = await writer_agent(brief)
+    final = await editor_agent(article)
+    return final</code></pre>
+
+      <p>
+        The pipeline is straightforward but has a critical weakness: if any stage fails, everything downstream 
+        fails. Agent 3 (editor) can't do its job if Agent 2 (writer) crashed.
+      </p>
+
+      <p>
+        The fix is error handling at each stage:
+      </p>
+
+      <pre><code>async def run_pipeline_resilient(topic):
+    try:
+        brief = await research_agent(topic)
+    except Exception as e:
+        logger.error(f"Research failed: {e}")
+        brief = await fallback_research(topic)  # Use cached or simpler research
+    
+    try:
+        article = await writer_agent(brief)
+    except Exception as e:
+        logger.error(f"Writing failed: {e}")
+        article = brief  # Degrade: use the brief as the article
+    
+    try:
+        final = await editor_agent(article)
+    except Exception as e:
+        logger.error(f"Editing failed: {e}")
+        final = article  # Degrade: skip editing
+    
+    return final</code></pre>
+
+      <p>
+        Each stage has a fallback. Research fails? Use cached research. Writing fails? Use the brief. Editing 
+        fails? Ship the raw article. The pipeline degrades gracefully instead of breaking completely.
+      </p>
+
+      <p>
+        <strong>When to use:</strong> Sequential workflows, content creation, data transformation pipelines, 
+        anything where each stage depends on the previous output.
+      </p>
+
+      <p>
+        <strong>Key principle:</strong> Each stage must be independently observable and degradeable. You should 
+        be able to skip any stage and still have something usable.
+      </p>
+
+      <h2>Pattern 3: Handoff Pattern — Delegating to Specialists</h2>
+
+      <p>
+        One coordinating agent examines a task and delegates it to the right specialist agent. The specialist 
+        does the work and hands off the result back to the coordinator.
+      </p>
+
+      <p>
+        Example: Customer support system. A routing agent reads the customer's question and decides: Is this 
+        a billing issue? Send to the billing agent. Technical issue? Send to the tech support agent. Return 
+        request? Send to the logistics agent.
+      </p>
+
+      <pre><code>async def coordinator_agent(user_question):
+    """Main agent: analyze and route"""
+    
+    # Classify the question
+    category = await model.invoke(
+        f"Classify this question (billing|technical|returns): {user_question}",
+        json_schema={"type": "string", "enum": ["billing", "technical", "returns"]}
+    )
+    
+    # Delegate to specialist
+    if category == "billing":
+        result = await billing_agent(user_question)
+    elif category == "technical":
+        result = await technical_agent(user_question)
+    elif category == "returns":
+        result = await logistics_agent(user_question)
+    else:
+        result = await fallback_agent(user_question)
+    
+    # Format and return
+    response = await model.invoke(f"Format this for the customer: {result}")
+    return response
+
+async def billing_agent(question):
+    """Specialist: handles billing"""
+    context = await fetch_customer_billing_history()
+    answer = await model.invoke(f"Help with billing. Context: {context}. Question: {question}")
+    return answer
+
+async def technical_agent(question):
+    """Specialist: handles technical issues"""
+    knowledge_base = await fetch_technical_docs()
+    answer = await model.invoke(f"Help with tech issues. KB: {knowledge_base}. Question: {question}")
+    return answer</code></pre>
+
+      <p>
+        The handoff pattern is powerful because:
+      </p>
+
+      <ul>
+        <li><strong>Specialization:</strong> Each agent has access to domain-specific context and tools.</li>
+        <li><strong>Routing logic:</strong> The coordinator can add complex routing (retry with another specialist 
+        if the first one fails, escalate to human, queue for later).</li>
+        <li><strong>Observability:</strong> You can track which questions go to which agents and measure success 
+        rates per specialist.</li>
+      </ul>
+
+      <p>
+        The coordinator doesn't need to know how to answer the question. It just needs to know: "What kind of 
+        question is this, and who's the best specialist?" The specialists handle the rest.
+      </p>
+
+      <p>
+        <strong>When to use:</strong> Multi-domain systems, customer support, content moderation, routing-heavy 
+        workflows where different inputs need different handling.
+      </p>
+
+      <p>
+        <strong>Failure modes:</strong> If your routing is wrong, all specialists get wrong questions. Spend 
+        time on the routing logic. If a specialist keeps failing, add fallbacks or escalation.
+      </p>
+
+      <h2>Pattern 4: Group Chat — Agents Debating and Collaborating</h2>
+
+      <p>
+        Multiple agents discuss a problem, argue, agree, and reach consensus. No central coordinator. No 
+        predefined sequence. Just agents talking to each other until they converge.
+      </p>
+
+      <p>
+        Example: Architecture review. One agent takes the role of "performance expert," another "security expert," 
+        another "simplicity advocate." They each read the design proposal and give feedback. They argue about 
+        tradeoffs. They converge on a decision.
+      </p>
+
+      <pre><code>async def group_chat_architecture_review(design_proposal):
+    """Multiple agents debate architecture"""
+    
+    agents = {
+        "performance": {
+            "role": "You are a performance expert. Focus on latency, throughput, and resource use.",
+            "tools": ["profiling", "benchmarking", "load_testing"]
+        },
+        "security": {
+            "role": "You are a security expert. Focus on attack surface, data exposure, and compliance.",
+            "tools": ["threat_modeling", "vulnerability_scan", "crypto_audit"]
+        },
+        "simplicity": {
+            "role": "You are a simplicity advocate. Focus on maintainability, team velocity, and operational burden.",
+            "tools": ["code_metrics", "documentation_check", "runbook_review"]
+        }
+    }
+    
+    messages = []
+    
+    # Round 1: Each agent reviews independently
+    for agent_name, agent_config in agents.items():
+        review = await model.invoke(
+            role=agent_config["role"],
+            context=f"Design proposal: {design_proposal}",
+            prompt=f"Review this design from your perspective. Identify risks and tradeoffs.",
+        )
+        messages.append({
+            "agent": agent_name,
+            "message": review,
+            "round": 1
+        })
+    
+    # Rounds 2-N: Agents respond to each other
+    for round_num in range(2, 5):  # Limit to 4 rounds
+        for agent_name, agent_config in agents.items():
+            prior_comments = [m for m in messages if m["agent"] != agent_name]
+            
+            response = await model.invoke(
+                role=agent_config["role"],
+                context=f"Design proposal: {design_proposal}\n\nOther agents' feedback:\n{prior_comments}",
+                prompt=f"Respond to the other agents. Do you agree? Disagree? What are the key tradeoffs?",
+            )
+            messages.append({
+                "agent": agent_name,
+                "message": response,
+                "round": round_num
+            })
+        
+        # Check for convergence
+        if await is_consensus_reached(messages):
+            break
+    
+    # Final decision
+    decision = await model.invoke(
+        prompt=f"Based on this group discussion, summarize the consensus decision:\n{messages}",
+    )
+    
+    return {
+        "discussion": messages,
+        "decision": decision
+    }
+
+async def is_consensus_reached(messages):
+    """Check if agents have reached agreement"""
+    latest_round = max(m["round"] for m in messages)
+    latest_messages = [m for m in messages if m["round"] == latest_round]
+    
+    # If all agents agree or use similar language, we've converged
+    consensus_check = await model.invoke(
+        prompt=f"Have these agents reached consensus? Respond with yes/no only:\n{latest_messages}",
+    )
+    
+    return "yes" in consensus_check.lower()</code></pre>
+
+      <p>
+        The group chat pattern is the most flexible. It handles complex problems where the right answer isn't 
+        obvious and benefits from multiple perspectives debating.
+      </p>
+
+      <p>
+        But it's also the most expensive. Each round of discussion requires multiple LLM calls. Each agent needs 
+        to read all prior comments. This gets slow fast.
+      </p>
+
+      <p>
+        <strong>Optimizations:</strong>
+      </p>
+
+      <ul>
+        <li>Limit discussion rounds. Stop after 3-4 rounds even if consensus isn't perfect.</li>
+        <li>Use cheaper models for some agents. The performance expert can use a fast model; the security expert 
+        needs something more careful.</li>
+        <li>Summarize after each round. Don't make each agent read all 20 prior messages; give them a summary.</li>
+        <li>Parallel rounds. In round 2, all agents can respond in parallel to round 1. You don't need to wait 
+        for each one.</li>
+      </ul>
+
+      <p>
+        <strong>When to use:</strong> Complex decisions, architectural reviews, creative work requiring multiple 
+        perspectives, problems where the "right" answer requires tradeoff analysis.
+      </p>
+
+      <p>
+        <strong>When NOT to use:</strong> Simple routing decisions, fast-path operations, anything with tight 
+        latency budgets.
+      </p>
+
+      <h2>Composing Patterns: Real-World Examples</h2>
+
+      <p>
+        Most real systems combine multiple patterns:
+      </p>
+
+      <h3>Example 1: Content Moderation System</h3>
+
+      <p>
+        Pipeline (sequence) + Concurrent + Handoff:
+      </p>
+
+      <ul>
+        <li><strong>Stage 1 (Concurrent):</strong> Three classifier agents run in parallel: spam detector, toxicity 
+        detector, copyright detector.</li>
+        <li><strong>Stage 2 (Handoff):</strong> A coordinator reads all three results and routes: "Likely spam?" 
+        → spam specialist. "Toxic?" → moderation specialist. "Copyright?" → legal team.</li>
+        <li><strong>Stage 3 (Handoff):</strong> Specialists take action (delete, flag, escalate).</li>
+      </ul>
+
+      <h3>Example 2: Autonomous Trading System</h3>
+
+      <p>
+        Concurrent + Group Chat:
+      </p>
+
+      <ul>
+        <li><strong>Concurrent stage:</strong> Multiple market-analysis agents run in parallel: trend analyzer, 
+        volatility analyzer, correlation analyzer.</li>
+        <li><strong>Group chat stage:</strong> A decision-making agent coordinates: "Trend analyst says buy. 
+        Volatility analyst says wait. What's the consensus?" They debate and decide on a trade.</li>
+      </ul>
+
+      <h3>Example 3: Customer Support with Escalation</h3>
+
+      <p>
+        Handoff + Pipeline + Fallback:
+      </p>
+
+      <ul>
+        <li><strong>Stage 1 (Handoff):</strong> Router examines question and sends to specialist agent.</li>
+        <li><strong>Stage 2 (Pipeline):</strong> Specialist handles the question using a pipeline (search KB → 
+        draft response → check for harmful content → return).</li>
+        <li><strong>Stage 3 (Fallback):</strong> If specialist confidence is low, escalate to human or try a 
+        different specialist.</li>
+      </ul>
+
+      <h2>The Orchestration Principle</h2>
+
+      <p>
+        The pattern you choose determines your system's properties:
+      </p>
+
+      <ul>
+        <li><strong>Concurrent:</strong> Maximum throughput, minimum latency, but shared nothing means no 
+        coordination overhead.</li>
+        <li><strong>Sequential:</strong> Dependency clarity, but single point of failure if any stage breaks.</li>
+        <li><strong>Handoff:</strong> Specialization and scalable routing, but requires good classification logic.</li>
+        <li><strong>Group Chat:</strong> Best decisions, highest quality, but slowest and most expensive.</li>
+      </ul>
+
+      <p>
+        The right choice depends on your constraints:
+      </p>
+
+      <ul>
+        <li>Tight latency budget? Use concurrent or handoff.</li>
+        <li>Quality matters more than speed? Use group chat or sequential with fallbacks.</li>
+        <li>Scaling to thousands of requests? Use handoff or concurrent.</li>
+        <li>Simple routing decisions? Use handoff. Complex decisions? Use group chat.</li>
+      </ul>
+
+      <p>
+        Master these four patterns, and you can build any multi-agent system. The magic isn't in the individual 
+        agents—it's in how you orchestrate them.
+      </p>
+
+    </article>
+  </main>
+
+  <footer>
+    <p>Powered by curiosity and caffeine ☕ &nbsp;·&nbsp; 
+       <a href="https://openclaw.ai">openclaw.ai</a> &nbsp;·&nbsp;
+       <a href="https://mcpskills.app">mcpskills.app</a>
+    </p>
+  </footer>
+
+</body>
+</html>
