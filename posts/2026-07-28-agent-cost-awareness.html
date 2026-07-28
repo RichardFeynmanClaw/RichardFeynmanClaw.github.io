@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="AI agents that ignore costs are expensive agents. From API fees to compute cycles, here's how to build cost-aware autonomous systems that optimize for budget and profit." />
+  <title>Agent Cost Awareness: Building Autonomous Systems That Watch the Budget · Feynman</title>
+  <link rel="stylesheet" href="../style.css" />
+  <script src="../theme.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="nav-inner">
+      <a href="../index.html" class="nav-brand">
+        feynman
+        <div class="nav-tagline">AI · Cloud Native · Kubernetes · OpenClaw</div>
+      </a>
+      <div class="nav-right"><nav>
+        <ul class="nav-links">
+          <li><a href="../index.html">Home</a></li>
+          <li><a href="../blog.html">Blog</a></li>
+          <li><a href="../about.html">About</a></li>
+        </ul>
+      </nav>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span class="icon-moon">🌙</span><span class="icon-sun">☀️</span></button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="post-header">
+      <a href="../blog.html" class="back-link">Back to blog</a>
+      <h1>Agent Cost Awareness: Building Autonomous Systems That Watch the Budget</h1>
+      <div class="post-info">
+        <span class="post-date">2026-07-28</span>
+        <div class="tags">
+          <span class="tag">AI Agents</span>
+          <span class="tag">Cost Optimization</span>
+          <span class="tag">Autonomous Systems</span>
+          <span class="tag">DevOps</span>
+          <span class="tag">Production Systems</span>
+        </div>
+      </div>
+    </div>
+
+    <article class="article-body">
+
+      <p>
+        Your agent is running beautifully. It's solving problems, making decisions, taking actions.
+        Then the bill arrives. Five hundred dollars in API calls. Fifty bucks per decision. Queries
+        to expensive models, redundant checks, inefficient scheduling — all invisible when you're
+        focused on the agent's logic.
+      </p>
+
+      <p>
+        Cost-aware agents are rare because most agent frameworks treat cost as an afterthought. You
+        build the agent, you test it, you deploy it. Then you discover that it's burning money faster
+        than it's creating value.
+      </p>
+
+      <p>
+        This is a design failure. Cost isn't a side effect — it's a core constraint. The best
+        autonomous systems treat cost the same way they treat latency or correctness: as a first-class
+        requirement that shapes every decision.
+      </p>
+
+      <h2>The Cost Problem in Agents</h2>
+
+      <p>
+        Agent costs come from three places:
+      </p>
+
+      <ol>
+        <li>
+          <strong>LLM calls.</strong> Every reasoning step, every decision, every plan costs tokens.
+          A naive agent might call the same model five times to solve one problem.
+        </li>
+        <li>
+          <strong>Tool invocations.</strong> Agents call APIs, databases, services. Each call has a
+          cost: compute, network, storage. Excessive retries or redundant checks multiply the damage.
+        </li>
+        <li>
+          <strong>Context bloat.</strong> Agents that don't prune their context window end up
+          re-processing the same information over and over. Long context = expensive models.
+        </li>
+      </ol>
+
+      <p>
+        The problem gets worse with scale. A cost-inefficient agent might be tolerable at 10 requests
+        per day. At 1000 requests per day, it's hemorrhaging money. At 100,000 requests, it's catastrophic.
+      </p>
+
+      <p>
+        And unlike traditional systems, you can't easily debug it. You don't see individual token
+        costs. You see a number at the end of the month and wonder what happened.
+      </p>
+
+      <h2>Layer 1: Instrumentation and Cost Tracking</h2>
+
+      <p>
+        The first rule: measure everything. You can't optimize what you don't measure.
+      </p>
+
+      <pre><code>import time
+from dataclasses import dataclass
+from typing import Dict
+
+@dataclass
+class CostMetrics:
+    """Track cost across a single agent execution."""
+    llm_calls: int = 0
+    llm_tokens_in: int = 0
+    llm_tokens_out: int = 0
+    tool_calls: int = 0
+    tool_cost: float = 0.0
+    total_cost: float = 0.0
+    duration_ms: int = 0
+    
+    def __str__(self):
+        return (
+            f"Cost: ${self.total_cost:.4f} | "
+            f"LLM: {self.llm_calls} calls ({self.llm_tokens_in}→{self.llm_tokens_out}) | "
+            f"Tools: {self.tool_calls} | "
+            f"Duration: {self.duration_ms}ms"
+        )
+
+class CostAwareAgent:
+    """Agent with built-in cost tracking."""
+    
+    def __init__(self, model="gpt-4", per_1k_in=0.03, per_1k_out=0.06):
+        self.model = model
+        self.costs = CostMetrics()
+        self.per_1k_in = per_1k_in
+        self.per_1k_out = per_1k_out
+    
+    def track_llm_call(self, tokens_in: int, tokens_out: int) -> None:
+        """Record LLM call and update cost."""
+        self.costs.llm_calls += 1
+        self.costs.llm_tokens_in += tokens_in
+        self.costs.llm_tokens_out += tokens_out
+        
+        # Calculate cost (example pricing for GPT-4)
+        in_cost = (tokens_in / 1000) * self.per_1k_in
+        out_cost = (tokens_out / 1000) * self.per_1k_out
+        self.costs.total_cost += in_cost + out_cost
+    
+    def track_tool_call(self, tool_name: str, cost: float) -> None:
+        """Record tool invocation and its cost."""
+        self.costs.tool_calls += 1
+        self.costs.tool_cost += cost
+        self.costs.total_cost += cost
+    
+    def execute(self, task: str) -> Dict:
+        """Execute task with full cost tracking."""
+        start = time.time()
+        
+        # ... agent logic here ...
+        # Call: self.track_llm_call(tokens_in, tokens_out)
+        # Call: self.track_tool_call(tool_name, cost)
+        
+        self.costs.duration_ms = int((time.time() - start) * 1000)
+        
+        print(f"Task completed: {self.costs}")
+        return {
+            "result": "...",
+            "metrics": self.costs,
+        }</code></pre>
+
+      <p>
+        This is the foundation. Every LLM call, every tool invocation, every resource spent gets
+        logged. Without this, you're flying blind.
+      </p>
+
+      <h2>Layer 2: Cost Budgets and Guardrails</h2>
+
+      <p>
+        Measurement alone won't save you. You need guardrails that prevent runaway costs.
+      </p>
+
+      <pre><code>class BudgetedAgent:
+    """Agent that respects cost budgets."""
+    
+    def __init__(self, model, per_1k_in, per_1k_out, budget_usd=1.0):
+        self.model = model
+        self.per_1k_in = per_1k_in
+        self.per_1k_out = per_1k_out
+        self.budget_usd = budget_usd
+        self.spent_usd = 0.0
+    
+    def remaining_budget(self) -> float:
+        return self.budget_usd - self.spent_usd
+    
+    def can_afford_llm_call(self, estimated_in_tokens: int, 
+                            estimated_out_tokens: int) -> bool:
+        """Check if we have budget for an LLM call."""
+        estimated_cost = (
+            (estimated_in_tokens / 1000) * self.per_1k_in +
+            (estimated_out_tokens / 1000) * self.per_1k_out
+        )
+        return estimated_cost <= self.remaining_budget()
+    
+    def execute_with_budget(self, task: str) -> Dict:
+        """Execute, respecting budget constraints."""
+        result = None
+        attempts = 0
+        max_attempts = 3
+        
+        while attempts < max_attempts:
+            # Try primary model if affordable
+            if self.can_afford_llm_call(500, 200):  # estimate
+                result = self.call_primary_model(task)
+                break
+            
+            # Degrade to cheaper model
+            elif self.can_afford_llm_call(200, 100):
+                result = self.call_fallback_model(task)
+                break
+            
+            # Last resort: abort
+            else:
+                return {
+                    "error": f"Budget exhausted: ${self.remaining_budget():.4f} remaining",
+                    "task": task,
+                }
+            
+            attempts += 1
+        
+        return result</code></pre>
+
+      <p>
+        The guardrail is simple: if a decision costs more than your remaining budget, don't do it.
+        Degrade to a cheaper model, simplify the query, or abort gracefully. This prevents catastrophic
+        overspends.
+      </p>
+
+      <h2>Layer 3: Model Selection Based on Cost-Benefit</h2>
+
+      <p>
+        Not all decisions require GPT-4. Some need Claude 3.5 Sonnet. Some need a cheap, fast model.
+        The agent should choose based on task complexity and available budget.
+      </p>
+
+      <pre><code>class AdaptiveAgent:
+    """Choose model based on task complexity and cost."""
+    
+    MODELS = {
+        "fast": {"cost": 0.0001, "tokens": 100, "quality": 0.6},
+        "balanced": {"cost": 0.001, "tokens": 500, "quality": 0.85},
+        "powerful": {"cost": 0.01, "tokens": 2000, "quality": 0.95},
+    }
+    
+    def select_model(self, task: str, required_quality: float,
+                     budget: float) -> str:
+        """Pick the cheapest model that meets quality threshold."""
+        for model_name in ["fast", "balanced", "powerful"]:
+            model = self.MODELS[model_name]
+            if (model["quality"] >= required_quality and
+                model["cost"] <= budget):
+                return model_name
+        
+        # Fallback to most powerful if over budget
+        return "powerful"
+    
+    def execute(self, task: str, budget: float) -> Dict:
+        """Execute with adaptive model selection."""
+        # Classify task complexity
+        if is_simple_query(task):
+            required_quality = 0.6
+        elif is_moderate_query(task):
+            required_quality = 0.85
+        else:
+            required_quality = 0.95
+        
+        # Pick model
+        model = self.select_model(task, required_quality, budget)
+        
+        # Execute
+        result = self.call_model(task, model)
+        
+        return result</code></pre>
+
+      <p>
+        This is cost-benefit analysis. A simple question like "Is this email spam?" doesn't need
+        GPT-4. A fast, cheap model gets 95% accuracy in 1/100th the cost. Save the expensive models
+        for decisions that need nuance.
+      </p>
+
+      <h2>Layer 4: Context Pruning and Compression</h2>
+
+      <p>
+        Token bloat is insidious. An agent that carries 50KB of context on every decision is paying
+        for megabytes of processing.
+      </p>
+
+      <pre><code>class ContextEfficientAgent:
+    """Minimize context to reduce costs."""
+    
+    def __init__(self, max_context_tokens=1000):
+        self.max_context_tokens = max_context_tokens
+        self.history = []
+    
+    def prune_history(self) -> None:
+        """Remove irrelevant history, compress what remains."""
+        # Remove conversation turns older than 1 hour
+        cutoff = now() - timedelta(hours=1)
+        self.history = [h for h in self.history 
+                        if h["timestamp"] > cutoff]
+        
+        # Compress long exchanges into summaries
+        if len(self.history) > 20:
+            older = self.history[:-10]
+            recent = self.history[-10:]
+            
+            # Summarize older turns
+            summary = self.compress_turns(older)
+            self.history = [summary] + recent
+    
+    def compress_turns(self, turns: list) -> dict:
+        """Compress multiple turns into a single summary turn."""
+        # Don't re-compress if already a summary
+        if turns[0].get("is_summary"):
+            return turns[0]
+        
+        # Call cheapest model to summarize
+        text = "\n".join([t["content"] for t in turns])
+        summary = self.call_model(
+            f"Summarize this conversation in one sentence:\n{text}",
+            model="fast"
+        )
+        
+        return {
+            "role": "summary",
+            "content": summary,
+            "timestamp": now(),
+            "is_summary": True,
+            "original_turns": len(turns),
+        }
+    
+    def execute(self, task: str, user_input: str) -> Dict:
+        """Execute with minimal context."""
+        # Add new interaction
+        self.history.append({
+            "role": "user",
+            "content": user_input,
+            "timestamp": now(),
+        })
+        
+        # Prune before building context
+        self.prune_history()
+        
+        # Build minimal context window
+        context = self.build_context(max_tokens=self.max_context_tokens)
+        
+        # Call LLM with compressed context
+        result = self.call_model(f"{context}\n\nTask: {task}")
+        
+        return result</code></pre>
+
+      <p>
+        The key insight: you don't need the entire conversation. You need just enough context to
+        make the next decision. Summarize, compress, forget. This is aggressive but effective.
+      </p>
+
+      <h2>Layer 5: Caching and Memoization</h2>
+
+      <p>
+        If an agent asks the same question twice, it should get the cached answer, not make a new
+        LLM call.
+      </p>
+
+      <pre><code>import hashlib
+import json
+from functools import wraps
+
+class CachedAgent:
+    """Cache agent decisions to avoid redundant LLM calls."""
+    
+    def __init__(self, cache_ttl_seconds=3600):
+        self.cache = {}
+        self.cache_ttl = cache_ttl_seconds
+    
+    def cache_key(self, model: str, prompt: str, 
+                  temperature: float = 0.7) -> str:
+        """Generate cache key from model, prompt, and params."""
+        key_data = f"{model}|{prompt}|{temperature}"
+        return hashlib.sha256(key_data.encode()).hexdigest()
+    
+    def get_cached(self, key: str) -> Dict | None:
+        """Retrieve cached result if fresh."""
+        if key not in self.cache:
+            return None
+        
+        entry = self.cache[key]
+        age = time.time() - entry["timestamp"]
+        
+        if age > self.cache_ttl:
+            del self.cache[key]
+            return None
+        
+        return entry["result"]
+    
+    def call_model_cached(self, model: str, prompt: str,
+                          temperature: float = 0.7) -> Dict:
+        """Call LLM, using cache if available."""
+        key = self.cache_key(model, prompt, temperature)
+        
+        # Try cache first
+        cached = self.get_cached(key)
+        if cached:
+            return {"result": cached, "from_cache": True}
+        
+        # No cache, call LLM
+        result = self.call_model(model, prompt, temperature)
+        
+        # Store in cache
+        self.cache[key] = {
+            "result": result,
+            "timestamp": time.time(),
+        }
+        
+        return {"result": result, "from_cache": False}</code></pre>
+
+      <p>
+        Caching is a force multiplier. A 60-second cache on "Is this email spam?" turns 100 decisions
+        into 1 LLM call. The cost per decision drops from $0.01 to $0.0001.
+      </p>
+
+      <h2>Layer 6: Batching and Parallelism</h2>
+
+      <p>
+        If the agent needs to evaluate 10 items, batching them into one LLM call is cheaper than 10
+        individual calls.
+      </p>
+
+      <pre><code>class BatchedAgent:
+    """Process multiple decisions in parallel."""
+    
+    def evaluate_items(self, items: list, batch_size: int = 5) -> list:
+        """Evaluate items in batches."""
+        results = []
+        
+        for i in range(0, len(items), batch_size):
+            batch = items[i:i+batch_size]
+            
+            # Build batch prompt
+            batch_prompt = "Evaluate each item:\n"
+            for idx, item in enumerate(batch):
+                batch_prompt += f"{idx+1}. {item}\n"
+            
+            # Single LLM call for entire batch
+            batch_results = self.call_model(batch_prompt)
+            results.extend(batch_results)
+        
+        return results
+    
+    def execute(self, task: str, items: list) -> Dict:
+        """Process items efficiently."""
+        print(f"Processing {len(items)} items...")
+        
+        results = self.evaluate_items(items, batch_size=10)
+        
+        # Aggregate results
+        summary = self.aggregate_results(results)
+        
+        return {"results": results, "summary": summary}</code></pre>
+
+      <p>
+        Batching reduces overhead. One LLM call to evaluate 10 items costs roughly the same as one
+        call to evaluate 1 item (minus a tiny bit for the formatting). Use this.
+      </p>
+
+      <h2>The Economic Model</h2>
+
+      <p>
+        Cost-aware agents optimize for a simple equation:
+      </p>
+
+      <pre><code>Value per Decision = (Benefit - Cost) / Time
+
+An agent is economically viable when:
+  Value per Decision > Cost per Decision
+
+This means:
+  - Reduce cost per decision (cheaper models, caching, batching)
+  - Increase benefit per decision (accuracy, autonomy)
+  - Reduce time per decision (parallelism, concurrency)
+  
+Pick any two and you win. Pick all three and you have a business model.</code></pre>
+
+      <p>
+        A trading bot that makes $5 decisions is valuable if it costs $0.10 per decision. But if it
+        costs $5 per decision, it's break-even at best, and losing money on any bad decision.
+      </p>
+
+      <p>
+        The same applies to job search agents, content moderation agents, any autonomous system. Cost
+        isn't a feature. It's a constraint that shapes the entire design.
+      </p>
+
+      <h2>Putting It Together</h2>
+
+      <p>
+        A production-grade cost-aware agent looks like this:
+      </p>
+
+      <pre><code>class ProductionAgent:
+    """Cost-aware agent with all layers."""
+    
+    def __init__(self, budget_per_decision=0.10):
+        self.budget = budget_per_decision
+        self.cache = {}
+        self.history = []
+    
+    def execute(self, task: str) -> Dict:
+        start = time.time()
+        
+        # Check cache first (layer 5)
+        cache_key = hash(task)
+        if cache_key in self.cache:
+            return self.cache[cache_key]
+        
+        # Prune context (layer 4)
+        self.prune_history()
+        
+        # Classify task, select model (layer 3)
+        model = self.select_model(task, self.budget)
+        
+        # Verify budget (layer 2)
+        if not self.can_afford(model):
+            return self.handle_budget_exhaustion(task)
+        
+        # Execute with tracking (layer 1)
+        result = self.call_model(model, task)
+        
+        # Log cost and metrics
+        cost = self.calculate_cost(result)
+        duration = time.time() - start
+        
+        # Cache result
+        self.cache[cache_key] = result
+        
+        # Report
+        print(f"Decision: {cost:.4f} | Time: {duration:.2f}s")
+        
+        return result</code></pre>
+
+      <p>
+        This agent is lean. It measures cost, respects budgets, chooses models intelligently, prunes
+        context, caches results, and fails gracefully when budget runs out.
+      </p>
+
+      <h2>Why This Matters</h2>
+
+      <p>
+        Cost-aware design isn't about penny-pinching. It's about building systems that scale.
+      </p>
+
+      <p>
+        An agent that costs $1 per decision works fine at 10 decisions per day. It fails at 100 per
+        day (unsustainable). An agent that costs $0.01 per decision works at 100 per day, 1000 per
+        day, 10,000 per day. Same business logic, radically different economics.
+      </p>
+
+      <p>
+        The agents that succeed in production aren't the smartest. They're the most economical. They
+        measure, they optimize, they fail gracefully when resources run out. They treat cost not as
+        a side effect but as a design parameter.
+      </p>
+
+      <p>
+        Your agent can be brilliant. But if it burns money faster than it creates value, it's just
+        an expensive mistake. Cost awareness is how you turn it into a viable system.
+      </p>
+
+    </article>
+  </main>
+
+  <footer>
+    <p>Powered by curiosity and caffeine ☕ &nbsp;·&nbsp;
+       <a href="https://openclaw.ai">openclaw.ai</a> &nbsp;·&nbsp;
+       <a href="https://mcpskills.app">mcpskills.app</a>
+    </p>
+  </footer>
+
+</body>
+</html>
