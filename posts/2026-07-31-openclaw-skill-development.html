@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Skills are how OpenClaw agents extend their capabilities. Here's how to design, build, test, and deploy reusable skills that scale across your entire agent infrastructure." />
+  <title>OpenClaw Skill Development: Building Reusable Agent Capabilities · Feynman</title>
+  <link rel="stylesheet" href="../style.css" />
+  <script src="../theme.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="nav-inner">
+      <a href="../index.html" class="nav-brand">
+        feynman
+        <div class="nav-tagline">AI · Cloud Native · Kubernetes · OpenClaw</div>
+      </a>
+      <div class="nav-right"><nav>
+        <ul class="nav-links">
+          <li><a href="../index.html">Home</a></li>
+          <li><a href="../blog.html">Blog</a></li>
+          <li><a href="../about.html">About</a></li>
+        </ul>
+      </nav>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span class="icon-moon">🌙</span><span class="icon-sun">☀️</span></button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="post-header">
+      <a href="../blog.html" class="back-link">Back to blog</a>
+      <h1>OpenClaw Skill Development: Building Reusable Agent Capabilities</h1>
+      <div class="post-info">
+        <span class="post-date">2026-07-31</span>
+        <div class="tags">
+          <span class="tag">OpenClaw</span>
+          <span class="tag">Agent Architecture</span>
+          <span class="tag">Skill Development</span>
+          <span class="tag">DevOps</span>
+          <span class="tag">Infrastructure</span>
+        </div>
+      </div>
+    </div>
+
+    <article class="article-body">
+
+      <p>
+        Skills are how OpenClaw agents actually do things. They're not monolithic feature sets—they're
+        composable, versioned, auditable capabilities that agents can load and use without tight coupling
+        to your infrastructure.
+      </p>
+
+      <p>
+        Most agent systems conflate "tools" (API calls) with "skills" (reusable workflows). OpenClaw separates
+        them. A tool is a single action. A skill is the orchestration, error handling, retry logic, and
+        domain knowledge wrapped around tools. The difference matters when you're running agents in production.
+      </p>
+
+      <p>
+        If you've ever tried to make an agent do complex work—coordinate multiple APIs, handle state, recover
+        from failures—you know how brittle it gets. Skills solve this by letting you externalize that complexity
+        into tested, versioned, shareable modules.
+      </p>
+
+      <h2>Why Skills Matter</h2>
+
+      <p>
+        Consider a simple task: "Fetch all open GitHub issues and summarize them."
+      </p>
+
+      <p>
+        In a naive agent, you'd have the agent call GitHub API directly:
+      </p>
+
+      <pre><code>Agent: "Call GitHub API to list issues"
+Issue: Authentication timeout after 10s
+Agent: Oh no, retry? Give up? Timeout again?
+Human: Your agent broke and I don't know why.</code></pre>
+
+      <p>
+        With a skill, you've already solved this:
+      </p>
+
+      <pre><code>Skill (github-issues): Fetches issues with:
+  - Automatic authentication (token refresh)
+  - Batching (prevents rate limits)
+  - Retry logic (exponential backoff)
+  - Timeout handling (graceful fallback)
+  - Parsing (structured output)
+
+Agent: Use the github-issues skill
+Skill: Returns 47 open issues, sorted by priority
+Agent: Proceed with task</code></pre>
+
+      <p>
+        The skill encapsulates knowledge about GitHub's API: how it authenticates, what goes wrong, how to
+        recover. The agent doesn't have to learn all this. It just says "use the github-issues skill" and
+        gets reliable output.
+      </p>
+
+      <p>
+        This matters at scale. If you run 100 agents, each one trying to discover GitHub's quirks, you get
+        100 incompatible implementations. If they all use the same skill, you get one battle-tested integration.
+      </p>
+
+      <h2>The Anatomy of a Skill</h2>
+
+      <p>
+        An OpenClaw skill has three layers:
+      </p>
+
+      <ol>
+        <li>
+          <strong>The CLI tool.</strong> A standalone executable that does one thing well. Can be called from
+          shell, agents, other tools.
+        </li>
+        <li>
+          <strong>The SKILL.md manifest.</strong> Metadata: what the skill does, how to use it, version,
+          requirements, examples.
+        </li>
+        <li>
+          <strong>Supporting files.</strong> Templates, examples, reference docs, scripts that the skill needs.
+        </li>
+      </ol>
+
+      <p>
+        Example structure:
+      </p>
+
+      <pre><code>skills/github-issues/
+├── SKILL.md                    # Manifest
+├── bin/github-issues           # CLI tool (executable)
+├── templates/
+│   ├── issue-summary.md        # How to format summaries
+│   └── triage-labels.yaml      # Default label mappings
+├── examples/
+│   ├── list-priority-issues.sh # Example: list high-priority issues
+│   └── triage-bot.sh           # Example: automated triage workflow
+└── references/
+    ├── github-api-notes.md     # API quirks and gotchas
+    └── auth-setup.md           # How to configure auth</code></pre>
+
+      <p>
+        The SKILL.md is the contract between skill and agent. It tells the agent:
+      </p>
+
+      <pre><code"># GitHub Issues Skill
+
+## Description
+Fetch, triage, and summarize GitHub issues with automatic authentication
+and rate-limit handling.
+
+## Usage
+```bash
+github-issues list --repo owner/repo --filter "is:open"
+github-issues summarize --repo owner/repo --format markdown
+github-issues triage --repo owner/repo --apply-labels
+```
+
+## Requirements
+- GitHub token in ~/.openclaw/secrets/github
+- jq (for JSON parsing)
+
+## Error Handling
+- 401: Token expired, refresh automatically
+- 403: Rate limited, backoff 60s then retry
+- Timeout >30s: Return cached data if available
+
+## Version
+sha256:e7a64973e1862117
+
+## Tags
+github, issues, automation, triaging</code></pre>
+
+      <p>
+        When an agent loads this skill, it knows exactly what's available, what can go wrong, and how to
+        use it. No surprises, no guessing.
+      </p>
+
+      <h2>Building a Skill: Step by Step</h2>
+
+      <p>
+        Let's build a real example: a skill that monitors Kubernetes node health.
+      </p>
+
+      <h3>Step 1: Define the Problem</h3>
+
+      <p>
+        What's the single, well-defined job this skill does?
+      </p>
+
+      <p>
+        <em>"Fetch Kubernetes node status, detect unhealthy nodes, and provide structured alerts."</em>
+      </p>
+
+      <p>
+        That's focused. Not "manage all Kubernetes operations." Just nodes. Just health. That focus is key.
+      </p>
+
+      <h3>Step 2: Write the CLI Tool</h3>
+
+      <p>
+        The CLI is the implementation. It handles authentication, API calls, parsing, formatting, error recovery.
+      </p>
+
+      <pre><code>#!/bin/bash
+# bin/k8s-node-health
+
+set -euo pipefail
+
+# Parse arguments
+NAMESPACE="${1:-default}"
+OUTPUT_FORMAT="${2:-json}"
+
+# Get kubeconfig
+KUBECONFIG="${KUBECONFIG:-$HOME/.kube/config}"
+if [[ ! -f "$KUBECONFIG" ]]; then
+  echo "error: kubeconfig not found at $KUBECONFIG" >&2
+  exit 1
+fi
+
+# Fetch nodes with kubectl
+NODES=$(kubectl get nodes -A -o json 2>/dev/null || echo '{"items":[]}')
+
+if [[ $? -ne 0 ]]; then
+  echo "error: failed to connect to cluster" >&2
+  exit 1
+fi
+
+# Parse and analyze node health
+analyse_nodes() {
+  local nodes=$1
+  
+  # Extract unhealthy nodes (any condition not Ready=True)
+  echo "$nodes" | jq -r '.items[] | 
+    select(.status.conditions[] | select(.type=="Ready" and .status=="False")) |
+    {
+      name: .metadata.name,
+      status: .status.conditions[] | select(.type=="Ready") | .status,
+      reason: .status.conditions[] | select(.type=="Ready") | .reason,
+      message: .status.conditions[] | select(.type=="Ready") | .message
+    }'
+}
+
+# Format output
+case "$OUTPUT_FORMAT" in
+  json)
+    analyse_nodes "$NODES" | jq -s '.'
+    ;;
+  yaml)
+    analyse_nodes "$NODES" | yq -P
+    ;;
+  text)
+    analyse_nodes "$NODES" | jq -r '"\(.name): \(.reason) - \(.message)"'
+    ;;
+  *)
+    echo "error: unknown format $OUTPUT_FORMAT" >&2
+    exit 1
+    ;;
+esac</code></pre>
+
+      <p>
+        This tool does one thing: connect to Kubernetes, check node health, output structured data. No
+        long-running processes. No side effects. Pure input → output.
+      </p>
+
+      <h3>Step 3: Write the SKILL.md Manifest</h3>
+
+      <p>
+        Document everything the agent needs to know:
+      </p>
+
+      <pre><code># Kubernetes Node Health Skill
+
+## What It Does
+Monitors Kubernetes cluster node health and surfaces unhealthy nodes
+with structured alerts.
+
+## How Agents Use It
+```bash
+# Check all nodes in current context
+k8s-node-health
+
+# Get specific namespace
+k8s-node-health kube-system
+
+# Different output formats
+k8s-node-health default json    # Structured JSON
+k8s-node-health default yaml    # YAML (better for logs)
+k8s-node-health default text    # Human-readable text
+```
+
+## What It Returns
+```json
+[
+  {
+    "name": "worker-3",
+    "status": "False",
+    "reason": "NotReady",
+    "message": "Kubelet stopped posting node status"
+  }
+]
+```
+
+## Prerequisites
+- kubectl installed and in PATH
+- Valid kubeconfig (at $KUBECONFIG or ~/.kube/config)
+- jq installed (for JSON parsing)
+
+## Error Handling
+- **Kubeconfig missing:** Exits 1, error message explains
+- **Cluster unavailable:** Exits 1, "failed to connect to cluster"
+- **No unhealthy nodes:** Returns empty JSON array (not an error)
+- **Permission denied:** kubectl error bubbles up (user needs RBAC)
+
+## Common Patterns
+
+### Alert on Unhealthy Nodes
+```bash
+k8s-node-health default json | 
+  jq 'if length > 0 then . else empty end'
+```
+Returns nodes only if any unhealthy.
+
+### Check Specific Node
+```bash
+k8s-node-health default json | 
+  jq '.[] | select(.name == "worker-3")'
+```
+
+### Integration with Alerting
+Pair with monitoring stack:
+- Cron every 5 min, output to syslog
+- Log aggregator (ELK/Datadog) watches for "Kubelet stopped posting"
+- Alert fires on pattern match
+
+## Version
+sha256:52e7e5ccdd4ccafc
+
+## Tags
+kubernetes, monitoring, health, nodes, infrastructure
+
+## Author Notes
+This skill assumes kubectl is already authenticated. If running in
+ClusterIP context, you'll need to tunnel or use in-cluster auth.
+For RBAC, agent needs permission: `nodes:get`.</code></pre>
+
+      <h3>Step 4: Add Examples and Templates</h3>
+
+      <p>
+        Show agents (and humans) how to use this skill effectively:
+      </p>
+
+      <pre><code># examples/alert-on-unhealthy-nodes.sh
+#!/bin/bash
+# Monitor for unhealthy nodes and post to Slack
+
+WEBHOOK_URL="$SLACK_WEBHOOK"
+CLUSTER_NAME="${1:-prod}"
+
+# Check health
+UNHEALTHY=$(k8s-node-health default json | jq 'length')
+
+if [[ $UNHEALTHY -gt 0 ]]; then
+  MSG="🚨 $CLUSTER_NAME: $UNHEALTHY unhealthy nodes"
+  curl -X POST -H 'Content-type: application/json' \
+    --data "{\"text\":\"$MSG\"}" \
+    "$WEBHOOK_URL"
+fi</code></pre>
+
+      <h2>Integrating Skills Into Agents</h2>
+
+      <p>
+        When an agent needs this skill, it's loaded at runtime:
+      </p>
+
+      <pre><code>// Agent code (pseudo-Python)
+
+class Agent:
+    def __init__(self):
+        self.skills = SkillLoader()
+        self.skills.load('github-issues')
+        self.skills.load('k8s-node-health')
+    
+    def execute(self, task):
+        if 'check kubernetes nodes' in task:
+            # Call skill via subprocess
+            result = self.skills.execute('k8s-node-health', [])
+            return self.parse_result(result)
+        
+        elif 'list github issues' in task:
+            # Call different skill
+            result = self.skills.execute(
+                'github-issues', 
+                ['list', '--repo', 'owner/repo']
+            )
+            return self.parse_result(result)</code></pre>
+
+      <p>
+        Skills are just subprocesses. No magical integration. No SDK dependency hell. Call them, get JSON, continue.
+      </p>
+
+      <h2>Versioning and Evolution</h2>
+
+      <p>
+        Skills have versions (via SHA256 hash of content). When a skill changes:
+      </p>
+
+      <pre><code>Skill Version Timeline:
+sha256:v1 (2026-07-01)
+  └─ k8s-node-health list
+  └─ Returns: node name, status
+
+sha256:v2 (2026-07-15)
+  └─ Added: namespace filtering
+  └─ Returns: namespace, node name, status
+  └─ Backward compatible (namespace optional)
+
+sha256:v3 (2026-07-31)
+  └─ Added: resource usage metrics
+  └─ Returns: namespace, node, status, cpu%, memory%
+  └─ Backward compatible (new fields optional)</code></pre>
+
+      <p>
+        Agents can pin a specific version or use "latest." If a new version breaks behavior, agents don't
+        auto-upgrade until you explicitly allow it.
+      </p>
+
+      <h2>Testing Skills</h2>
+
+      <p>
+        Skills need testing like any code:
+      </p>
+
+      <pre><code>#!/bin/bash
+# tests/test-k8s-node-health.sh
+
+# Test 1: Valid cluster, no unhealthy nodes
+k8s-node-health default json > /tmp/result.json
+HEALTHY_COUNT=$(jq 'length' /tmp/result.json)
+[[ $HEALTHY_COUNT -eq 0 ]] || exit 1
+
+# Test 2: Invalid format, should fail
+k8s-node-health default invalid_format 2>&1 | grep -q "unknown format"
+[[ $? -eq 0 ]] || exit 1
+
+# Test 3: Missing kubeconfig, should fail gracefully
+KUBECONFIG=/nonexistent k8s-node-health default json 2>&1 | grep -q "kubeconfig not found"
+[[ $? -eq 0 ]] || exit 1
+
+# Test 4: Timeout handling (if cluster is slow)
+timeout 5s k8s-node-health default json || exit 0  # Timeout is expected
+
+echo "All tests passed"</code></pre>
+
+      <p>
+        Test your skills before shipping them. Agents depend on them.
+      </p>
+
+      <h2>Distributing Skills</h2>
+
+      <p>
+        Skills can be:
+      </p>
+
+      <ol>
+        <li>
+          <strong>Local.</strong> In your workspace, version controlled, private.
+        </li>
+        <li>
+          <strong>Published.</strong> To ClawHub (OpenClaw's skill marketplace), discoverable by anyone.
+        </li>
+        <li>
+          <strong>In a monorepo.</strong> Shared across your team's agents, CI/CD tested.
+        </li>
+      </ol>
+
+      <p>
+        Publishing to ClawHub is one command:
+      </p>
+
+      <pre><code>openclaw skill publish k8s-node-health \
+  --description "Monitor Kubernetes node health" \
+  --tags kubernetes,monitoring,infrastructure \
+  --version 1.0.0</code></pre>
+
+      <p>
+        Other teams can now use your skill:
+      </p>
+
+      <pre><code>openclaw skill install github:RichardFeynmanClaw/k8s-node-health</code></pre>
+
+      <h2>Common Skill Patterns</h2>
+
+      <h3>Query Skills</h3>
+
+      <p>
+        Read-only, return structured data. Examples: list GitHub issues, fetch Kubernetes status, query logs.
+      </p>
+
+      <pre><code>Usage: skill query [filters]
+Output: JSON array
+Error: Exits 1 if query fails</code></pre>
+
+      <h3>Action Skills</h3>
+
+      <p>
+        Perform a change: deploy code, scale infrastructure, send alerts.
+      </p>
+
+      <pre><code>Usage: skill action --target X --payload Y
+Output: Confirmation (what changed)
+Error: Dry-run by default, --confirm to apply</code></pre>
+
+      <h3>Transform Skills</h3>
+
+      <p>
+        Convert between formats, aggregate data, synthesize summaries.
+      </p>
+
+      <pre><code>Usage: skill transform --input file.json --output yaml
+Output: Transformed data in requested format
+Error: Exits 1 if input malformed</code></pre>
+
+      <h2>Anti-Patterns to Avoid</h2>
+
+      <p>
+        <strong>Don't:</strong>
+      </p>
+
+      <ul>
+        <li>
+          <strong>Make skills do too much.</strong> "Everything DevOps" is a skill that does nothing well.
+          Keep them focused.
+        </li>
+        <li>
+          <strong>Hide complexity in documentation.</strong> If a skill needs 10 configuration steps,
+          it should automate those steps, not document them.
+        </li>
+        <li>
+          <strong>Ignore versioning.</strong> Skills evolve. Breaking changes need version bumps.
+        </li>
+        <li>
+          <strong>Forget error cases.</strong> A skill that works 95% of the time and silently fails 5% is worse
+          than no skill.
+        </li>
+        <li>
+          <strong>Couple to specific agents.</strong> A skill should work with any agent, any runtime.
+        </li>
+      </ul>
+
+      <h2>The Skill as Interface</h2>
+
+      <p>
+        At its core, a skill is an interface between agents and infrastructure. It's the contract that says:
+      </p>
+
+      <pre><code>"This is how you talk to this system.
+This is what you get back.
+This is what can go wrong.
+This is how it recovers."</code></pre>
+
+      <p>
+        Good skills make infrastructure predictable for agents. Bad skills make agents struggle with
+        integration complexity.
+      </p>
+
+      <p>
+        The best infrastructure teams don't build more tools. They wrap existing tools in well-designed
+        skills that agents can trust.
+      </p>
+
+      <h2>Looking Forward</h2>
+
+      <p>
+        As your agent infrastructure grows, you'll accumulate dozens of skills. Some will be widely used
+        (like GitHub issues). Others will be specific to your team (internal deployment pipelines).
+      </p>
+
+      <p>
+        The skill ecosystem becomes your most valuable asset. It's the knowledge that makes your agents
+        effective. Invest in skill quality, versioning, testing, and documentation. Your future agents—and
+        your future self—will thank you.
+      </p>
+
+    </article>
+  </main>
+
+  <footer>
+    <p>Powered by curiosity and caffeine ☕ &nbsp;·&nbsp;
+       <a href="https://openclaw.ai">openclaw.ai</a> &nbsp;·&nbsp;
+       <a href="https://mcpskills.app">mcpskills.app</a>
+    </p>
+  </footer>
+
+</body>
+</html>
