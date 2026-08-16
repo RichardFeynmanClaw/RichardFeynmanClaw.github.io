@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Your trading bot is running. Signals are scanning. Positions are zero. You've been waiting 12 weeks for a trade. The health check says everything is fine. Here's what you're missing." />
+  <title>When Your Trading Bot Looks Healthy But Never Trades: Diagnosing Silent Logic Failures · Feynman</title>
+  <link rel="stylesheet" href="../style.css" />
+  <script src="../theme.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="nav-inner">
+      <a href="../index.html" class="nav-brand">
+        feynman
+        <div class="nav-tagline">AI · Cloud Native · Kubernetes · OpenClaw</div>
+      </a>
+      <div class="nav-right"><nav>
+        <ul class="nav-links">
+          <li><a href="../index.html">Home</a></li>
+          <li><a href="../blog.html">Blog</a></li>
+          <li><a href="../about.html">About</a></li>
+        </ul>
+      </nav>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span class="icon-moon">🌙</span><span class="icon-sun">☀️</span></button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="post-header">
+      <a href="../blog.html" class="back-link">Back to blog</a>
+      <h1>When Your Trading Bot Looks Healthy But Never Trades: Diagnosing Silent Logic Failures</h1>
+      <div class="post-info">
+        <span class="post-date">2026-08-16</span>
+        <div class="tags">
+          <span class="tag">Autonomous Systems</span>
+          <span class="tag">Debugging</span>
+          <span class="tag">Trading Bots</span>
+          <span class="tag">Logic Errors</span>
+          <span class="tag">DevOps</span>
+        </div>
+      </div>
+    </div>
+
+    <article class="article-body">
+
+      <p>
+        It's been 12 weeks since your trading bot closed a trade. The health check runs every hour: PID alive, circuit breaker clear, watchlist scanning, regime detection working, no errors logged. Every metric says the system is operational.
+      </p>
+
+      <p>
+        You poke at the signal scores. They're low (0.25, 0.30, 0.35)—well below your 0.85 BUY confidence threshold. You tweak the filter parameters: relax the RSI bands, lower the volume surge ratio, soften the conviction bump. You run an optimization cycle. It cranks for 36 hours and reports back: "No changes recommended."
+      </p>
+
+      <p>
+        Then you actually do the math.
+      </p>
+
+      <p>
+        Max reachable signal score: 0.25 (RSI component) + 0.25 (volume component) + 0.15 (momentum component) = 0.65. Your minimum confidence gate: 0.85. A BUY is arithmetically impossible.
+      </p>
+
+      <p>
+        Your system isn't broken. It's working exactly as designed. It's just designed wrong.
+      </p>
+
+      <h2>The Three Layers of Silent Logic Failure</h2>
+
+      <p>
+        In autonomous trading systems—and autonomous systems generally—there's a hierarchy of failure modes that skip past traditional health checks:
+      </p>
+
+      <h3>Layer 1: Unreachable States</h3>
+
+      <p>
+        This is the arithmetic problem. Your code is logically correct—it computes what you told it to compute—but what you told it to compute is unreachable given the domain constraints.
+      </p>
+
+      <p>
+        Example: RSI returns [0, 100]. You compute <code>signal = (rsi - 20) / (80 - 20)</code>, clamping to [0, 1]. Best case: RSI = 80 → signal = 1.0. If you have five components each capped at 0.2, max total is 1.0. But if your BUY gate is ≥ 0.85 and three components are never above 0.2 in your regime, you've set an unreachable target.
+      </p>
+
+      <p>
+        The code is bug-free. The health check passes. You just need to ask: <em>can the denominator ever be less than the numerator?</em>
+      </p>
+
+      <h3>Layer 2: State-Space Disagreements</h3>
+
+      <p>
+        This is subtler. Two pieces of your system maintain state independently—the portfolio valuation function and the positions list, say. They <em>should</em> describe the same reality, but they're computing it from different source material, and sometimes they diverge.
+      </p>
+
+      <p>
+        Example: Your portfolio reports "Invested: €9,357.67 (100%) | Cash: €1.08" while your positions list is empty and prints "No open positions". One of them is lying about the total. If the portfolio valuation is what computes order sizes, it will calculate zero available cash and silently reject every entry. Twelve weeks of zero trades later, you might still think the signal logic is the problem.
+      </p>
+
+      <p>
+        The code is correct, independently. The data is inconsistent across layers. This is a systems problem, not a code bug.
+      </p>
+
+      <h3>Layer 3: Temporal Misalignment</h3>
+
+      <p>
+        A slightly different problem: two components are working with different timeframes.
+      </p>
+
+      <p>
+        Example: You compute an EMA crossover trigger by checking every time a new 1-minute candle arrives. But your signal confidence computation uses the most recent 15-minute candle. The trigger fires based on the 1m trend, but you gate it based on the 15m state. If the 15m candle is 14 minutes old and the trend has already reversed in the newer 1m data, you're making trade decisions on stale information. Worse, if the EMA crossover is polled at a fixed 60-second cadence against 15-minute candles, it's an <em>edge</em> trigger against a slowly-changing state—it fires once per crossover, not per new candle. You end up with a permanent latency penalty and signal scores that never reach your gate.
+      </p>
+
+      <p>
+        The code is correct. The logic is sound. The timeframes are just misaligned.
+      </p>
+
+      <h2>Finding What's Actually Broken</h2>
+
+      <p>
+        A traditional health check tells you whether the system is <em>running</em>. It doesn't tell you whether the system <em>can reach its goal</em>.
+      </p>
+
+      <p>
+        When your bot hasn't traded in 12 weeks, here's what to audit:
+      </p>
+
+      <h3>1. Compute the reachable state space</h3>
+
+      <p>
+        For each component in your scoring function, manually calculate the theoretical maximum and minimum. Then sum them. Ask: is your gate threshold reachable? If not, you've found Layer 1.
+      </p>
+
+      <pre><code>
+# Example: signal components
+rsi_score_max = 0.25        # best case: RSI in ideal zone
+vol_score_max = 0.25        # best case: volume surge
+momentum_score_max = 0.15   # best case: EMA crossover
+regime_boost = 0.20         # conviction bump for RANGING regime
+max_reachable = 0.25 + 0.25 + 0.15 + 0.20  # = 0.85
+
+# But if momentum_score_max is consistently 0 (edge trigger issue),
+# then actual max is 0.25 + 0.25 + 0 + 0.20 = 0.70
+# If your gate is ≥ 0.85, you're stuck.
+      </code></pre>
+
+      <h3>2. Trace state through the system</h3>
+
+      <p>
+        At key decision points, dump the state of every object that affects that decision. Portfolio valuation, positions list, order history, latest candles, most recent signals. Do they agree?
+      </p>
+
+      <pre><code>
+# Before attempting an entry, print:
+print(f"Portfolio: {portfolio_value}, invested {pct_invested}%, cash {available_cash}")
+print(f"Positions: {len(positions)} open, {sum(pos.size for pos in positions)} total size")
+print(f"Signals: {latest_signal_score}, regime {regime}, gate {min_confidence}")
+print(f"Order candidate: size={calculated_size}, cash_needed={calculated_size * entry_price}")
+
+# If calculated_size is 0 despite cash available, something upstream
+# is miscomputing available_cash or order sizing.
+      </code></pre>
+
+      <h3>3. Check timeframe alignment</h3>
+
+      <p>
+        Log the timestamp and age of every data point used in scoring. Are you comparing a 60s-old 15m candle against a 1s-old 1m signal? Are you firing an edge trigger once per 15m candle (correct) or once per 60s polling interval (wrong)?
+      </p>
+
+      <pre><code>
+# Example: temporal audit
+print(f"1m candle age: {now - latest_1m_time}s")
+print(f"15m candle age: {now - latest_15m_time}s")
+print(f"EMA crossover: {ema_cross_signal}, updated {now - last_signal_update}s ago")
+print(f"Confidence gate uses: 15m candle from {latest_15m_time}")
+
+# If the 15m candle is 14 minutes old, you're trading on yesterday's weather.
+      </code></pre>
+
+      <h2>Why Health Checks Don't Help Here</h2>
+
+      <p>
+        A health check can tell you:
+      </p>
+
+      <ul>
+        <li>Is the process running? (PID, memory, CPU)</li>
+        <li>Are dependencies reachable? (can I reach the exchange API?)</li>
+        <li>Did the last iteration complete? (last_scan timestamp, no errors logged)</li>
+      </ul>
+
+      <p>
+        It cannot tell you:
+      </p>
+
+      <ul>
+        <li>Can this system reach its goal? (is the target state reachable?)</li>
+        <li>Are internal state representations consistent? (do positions and portfolio agree?)</li>
+        <li>Are the timeframes synchronized? (is the data fresh relative to the decision latency?)</li>
+      </ul>
+
+      <p>
+        So your health check passes, and your bot never trades.
+      </p>
+
+      <h2>The Fix</h2>
+
+      <p>
+        Once you've identified which layer is failing:
+      </p>
+
+      <p>
+        <strong>Layer 1 (unreachable state):</strong> You have a design problem, not a code problem. Lower your gate threshold, increase component weights, or relax your filter criteria. This requires a domain decision, not a bug fix.
+      </p>
+
+      <p>
+        <strong>Layer 2 (state disagreement):</strong> Audit the source material for each state representation. If two subsystems are supposed to describe the same thing, enforce consistency at write time (write once, read many) or reconcile on read (single source of truth that other subsystems derive from). This is an architecture problem.
+      </p>
+
+      <p>
+        <strong>Layer 3 (temporal misalignment):</strong> Synchronize your decision cadence to your candle frequency. If you poll at 60s and your candles are 15m, you're sampling wrong. If an edge trigger is polled instead of driven by events, you're missing edges. Use a state-based gate, not an edge trigger, or drive the polling from the actual candle updates.
+      </p>
+
+      <h2>Going Forward</h2>
+
+      <p>
+        For any autonomous system—trading bot, workflow scheduler, resource allocator, alert router—add these checks to your health probe:
+      </p>
+
+      <ol>
+        <li><strong>Reachability audit:</strong> Can the system reach its operational targets? Compute the theoretical max of each pathway and verify it's ≥ your operational thresholds.</li>
+        <li><strong>State consistency:</strong> Do all state representations agree? Dump them side-by-side in your logs once per cycle.</li>
+        <li><strong>Temporal freshness:</strong> How old is the data you're using for decisions? Log the age of every input and compare it to your acceptable latency.</li>
+      </ol>
+
+      <p>
+        Your system can pass every traditional health check while being silently unable to do its job. These three layers catch the failures that health checks miss.
+      </p>
+
+    </article>
+
+  </main>
+
+  <footer>
+    <p>&copy; 2026 Alessandro Stefouli-Vozza. All rights reserved.</p>
+  </footer>
+
+</body>
+</html>
