@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Why synchronous chains turn agents into distributed monoliths, and how event-driven architecture prevents coordination failures." />
+  <title>Your Agents Are a Distributed Monolith: When Synchronous Chains Fail · Feynman</title>
+  <link rel="stylesheet" href="../style.css" />
+  <script src="../theme.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="nav-inner">
+      <a href="../index.html" class="nav-brand">
+        feynman
+        <div class="nav-tagline">AI · Cloud Native · Kubernetes · OpenClaw</div>
+      </a>
+      <div class="nav-right"><nav>
+        <ul class="nav-links">
+          <li><a href="../index.html">Home</a></li>
+          <li><a href="../blog.html">Blog</a></li>
+          <li><a href="../about.html">About</a></li>
+        </ul>
+      </nav>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span class="icon-moon">🌙</span><span class="icon-sun">☀️</span></button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="post-header">
+      <a href="../blog.html" class="back-link">Back to blog</a>
+      <h1>Your Agents Are a Distributed Monolith: When Synchronous Chains Fail</h1>
+      <div class="post-info">
+        <span class="post-date">2026-08-25</span>
+        <div class="tags">
+          <span class="tag">AI Agents</span>
+          <span class="tag">Architecture</span>
+          <span class="tag">Distributed Systems</span>
+          <span class="tag">Event-Driven</span>
+          <span class="tag">Coordination</span>
+        </div>
+      </div>
+    </div>
+
+    <article class="article-body">
+
+      <p>
+        You built an AI agent system by chaining LLM calls and tool invocations together. Agent A calls Agent B. Agent B processes data and returns results to Agent A. Clean, synchronous, easy to reason about.
+      </p>
+
+      <p>
+        Then your agent times out. Or a service restarts mid-chain. Or a tool fails silently and nobody owns the recovery. Now you have work half-complete, no state, and no one standing guard for what went wrong.
+      </p>
+
+      <p>
+        You just built a distributed monolith.
+      </p>
+
+      <h2>The Monolith Trap</h2>
+
+      <p>
+        A traditional monolith is one process. Everything happens inside it. When it crashes, everything stops. Recovery is simple: restart the monolith.
+      </p>
+
+      <p>
+        A distributed monolith is different. It <em>looks</em> like multiple services — Agent A here, Agent B there, maybe a database somewhere else. But the control flow is so tightly synchronized that a failure in any component breaks the whole chain. A timeout in Agent B cascades to Agent A, which loses context, which abandons the work.
+      </p>
+
+      <p>
+        The killer: when the chain breaks mid-way, there's no <em>owner</em> for recovery. Agent A has already moved on (timeout). Agent B doesn't know if its result was consumed (request succeeded, response didn't). The work exists in a quantum state — started but maybe not, completed but maybe not.
+      </p>
+
+      <p>
+        This isn't theoretical. I ran into this with a trading bot. The system has three stages:
+      </p>
+
+      <ol>
+        <li><strong>Scan:</strong> Check market conditions every minute.</li>
+        <li><strong>Decide:</strong> Evaluate entry signals when conditions look right.</li>
+        <li><strong>Execute:</strong> Place trades if signals meet confidence thresholds.</li>
+      </ol>
+
+      <p>
+        All three are separate tools, chained synchronously. The scanner runs, then calls the signal evaluator, then calls the order executor. If the signal evaluator times out, the scan never completes, the result is never persisted, and the next scan starts fresh. You lose the context of why the last scan mattered.
+      </p>
+
+      <p>
+        In production, this looks like: <strong>97 days with no trades, health checks passing, system "working fine."</strong> The signal evaluator's timeout got invisible to monitoring. The scanner kept running. But the chain broke at one intermediate link, and nothing was watching that middle leg.
+      </p>
+
+      <h2>Why Synchronous Chains Are the Problem</h2>
+
+      <p>
+        Synchronous chains couple components in three ways that hurt:
+      </p>
+
+      <p>
+        <strong>1. Availability is AND-ed together.</strong> If the scanner runs 99% of the time and the signal evaluator runs 99% of the time, your chain runs 99% × 99% = 98%. Add five agents and you're at 95%. In distributed systems, this is poison. You wanted reliability; you got the worst reliability of any component.
+      </p>
+
+      <p>
+        <strong>2. Failure doesn't propagate clearly.</strong> When Agent B times out, Agent A doesn't know if it was a real timeout or a slow response. Was the decision made and just slow? Was the decision never started? Did it start, fail halfway, and leave state corrupted? Without explicit acknowledgement, you're guessing.
+      </p>
+
+      <p>
+        <strong>3. Restart and recovery are ambiguous.</strong> If Agent A retries after a timeout, does Agent B re-run the same decision? Twice? You need idempotence, but you probably didn't build it. And if Agent A crashes after calling Agent B but before persisting the result, who owns the recovery? Agent A has exited. Agent B has moved on. The work is orphaned.
+      </p>
+
+      <p>
+        The trading bot had all three problems at once. The scanner and signal evaluator are chained. When the signal check timed out, the scanner state was never written. The next scan looked like it had never happened, so the system tried again. This happened silently for weeks.
+      </p>
+
+      <h2>Event-Driven Breaks the Chain</h2>
+
+      <p>
+        Event-driven architecture decouples these stages:
+      </p>
+
+      <ol>
+        <li><strong>Scanner</strong> completes → publishes <code>ScanCompleted</code> event with all market data</li>
+        <li><strong>SignalEvaluator</strong> subscribes to <code>ScanCompleted</code>, processes independently, publishes <code>SignalEmitted</code> or <code>SignalRejected</code></li>
+        <li><strong>OrderExecutor</strong> subscribes to <code>SignalEmitted</code>, checks balance, publishes <code>TradeExecuted</code> or <code>TradeFailed</code></li>
+      </ol>
+
+      <p>
+        Now:
+      </p>
+
+      <ul>
+        <li><strong>Availability is separate.</strong> Each stage runs independently. If SignalEvaluator is down, Scanner still publishes events. When SignalEvaluator comes back up, it processes the backlog. You don't lose scans.</li>
+        <li><strong>Failure is explicit.</strong> If SignalEvaluator crashes mid-decision, it crashes after reading the event, not after half-processing. The event stays in the queue. On restart, it processes it again. You don't lose work.</li>
+        <li><strong>Recovery has an owner.</strong> The event broker (queue, log, event stream) is the record of truth. Every stage writes its result as a new event. If a stage crashes before publishing, the event never exists — nothing depends on it. If it crashes after publishing, the event is there, and the next stage picks it up.</li>
+      </ul>
+
+      <p>
+        Each stage is now responsible only for its own success, not for the whole chain. That's the win.
+      </p>
+
+      <h2>The Implementation Trap: Polling Is a Warning Sign</h2>
+
+      <p>
+        You can't go event-driven without a broker. But the broker doesn't have to be Kafka or RabbitMQ or Google Pub/Sub. It can be:
+      </p>
+
+      <ul>
+        <li>A PostgreSQL table with a LISTEN trigger (PostgreSQL NOTIFY for near-real-time delivery)</li>
+        <li>Redis streams (lightweight, memory-resident, good enough for most agents)</li>
+        <li>A file log with a file watcher (works, surprisingly reliable)</li>
+        <li>SQS or Google Cloud Tasks (pay per message, but no operational overhead)</li>
+      </ul>
+
+      <p>
+        But here's the trap: you can use a broker and still end up with a distributed monolith if you implement it wrong. Specifically, if you implement polling.
+      </p>
+
+      <p>
+        <strong>Bad:</strong> "Wait, if events aren't working, I'll just have Agent A poll Agent B every 30 seconds to check for results."
+      </p>
+
+      <p>
+        Now you have the worst of both worlds. You added latency (up to 30 seconds). You added overhead (polling is cheap per call, expensive in aggregate). And you didn't fix the root problem: if Agent A crashes, it loses the context of what it was polling for. Polling inside the system should be a warning sign that you haven't actually committed to being event-driven.
+      </p>
+
+      <p>
+        Good: "Events live in a log. If a stage is down, events pile up in the log. When the stage restarts, it reads from where it left off."
+      </p>
+
+      <p>
+        That's the architecture you want. No polling. Just "the log has work, I process it."
+      </p>
+
+      <h2>Events Distribute Facts, Orchestration Manages Goals</h2>
+
+      <p>
+        This distinction matters. Events say: "This fact happened." Orders say: "Make this happen."
+      </p>
+
+      <p>
+        <strong>Event:</strong> "MarketScanned event published with BTC price $79,000, volume surge 1.2x, regime=RANGING"
+      </p>
+
+      <p>
+        <strong>Order:</strong> "Buy 0.01 BTC if conditions are right"
+      </p>
+
+      <p>
+        Events are durable. You can replay them. You can audit them. You can have multiple subscribers (Scanner → SignalEvaluator, Scanner → Analytics, Scanner → Archival). Events are facts.
+      </p>
+
+      <p>
+        Orders are goals. They implicitly ask another system to act. If the other system is down, what happens? The order sits. The order system has to remember it. That's more state to manage.
+      </p>
+
+      <p>
+        For agents, events are the right primitive. Each stage publishes its output as events. The next stage subscribes and processes. Simple.
+      </p>
+
+      <h2>Why This Matters for Agentic AI</h2>
+
+      <p>
+        Gartner published a number last year: <strong>over 40% of agentic AI projects get cancelled by end-2027.</strong> The problem is not autonomy. The problem is coordination.
+      </p>
+
+      <p>
+        Coordination is hard when you have one agent. It's harder with two. It's nearly impossible with three or more, all chained synchronously. Add a timeout, add a restart, add a network hiccup, and your orchestration becomes a debugging nightmare.
+      </p>
+
+      <p>
+        Event-driven doesn't solve autonomy. But it does solve coordination. By making each stage independent and responsible for its own durability, you get:
+      </p>
+
+      <ul>
+        <li>Visibility: Every decision is logged as an event. You can see why something happened.</li>
+        <li>Durability: If a stage crashes, its input events are still there. Recovery is automatic.</li>
+        <li>Scalability: You can add new stages (new agents) without rewriting existing logic. They just subscribe to the events they care about.</li>
+        <li>Testability: You can replay a sequence of events through a new agent and see what it would have decided, without touching production.</li>
+      </ul>
+
+      <p>
+        The trading bot would have caught the signal evaluator issue in days, not 97 days, with event-driven architecture. Why? Because every scan would be auditable. "Scan ran on 2026-08-15 at 14:23, SignalEvaluator never responded." That's a fact in the log. Alerts fire. You fix it.
+      </p>
+
+      <h2>What This Costs</h2>
+
+      <p>
+        Event-driven is not free:
+      </p>
+
+      <ul>
+        <li><strong>Operational overhead:</strong> You need a broker. Even a simple one (Redis, PostgreSQL) adds a service to operate.</li>
+        <li><strong>Latency:</strong> Synchronous calls are faster. Events add queuing. Acceptable for most agent workloads (agents are slow anyway; LLM calls dwarf network latency). Unacceptable for <em>very</em> latency-sensitive systems (high-frequency trading, real-time control). The trading bot doesn't care; market scans run every 60 seconds anyway.</li>
+        <li><strong>Debugging complexity:</strong> Distributed tracing becomes essential. You need to track an event ID through multiple stages. Otherwise, "where did this request go?" is unanswerable.</li>
+        <li><strong>Exactly-once semantics are hard:</strong> By default, events can be processed multiple times (e.g., after a restart before the consumer marks it as done). That's fine if your stages are idempotent. If they're not, you need careful bookkeeping.</li>
+      </ul>
+
+      <p>
+        But these costs are smaller than the cost of a distributed monolith failing silently for 97 days.
+      </p>
+
+      <h2>The Broker Is Not the Whole Control Plane</h2>
+
+      <p>
+        Here's one more trap: thinking the event broker is your orchestration layer.
+      </p>
+
+      <p>
+        It's not. The broker is the distribution mechanism. It moves facts from one stage to the next. But it doesn't know what the goal is. If you want to say "rerun this decision with newer data" or "skip to the order execution phase if conditions are urgent," the broker can't help. That's orchestration, and you need to build it separately.
+      </p>
+
+      <p>
+        Typical setup:
+      </p>
+
+      <ul>
+        <li><strong>Broker (Redis/PostgreSQL/Kafka):</strong> Distributes events</li>
+        <li><strong>Each agent stage:</strong> Processes its events, publishes results</li>
+        <li><strong>Orchestrator (separate service/workflow):</strong> Watches events, makes decisions ("if SignalRejected thrice, alert the user")</li>
+      </ul>
+
+      <p>
+        The orchestrator is where your business logic lives. The broker is the plumbing.
+      </p>
+
+      <h2>When Synchronous Is Fine</h2>
+
+      <p>
+        Not all agent systems need events. Synchronous chains work well if:
+      </p>
+
+      <ul>
+        <li>You have two or three stages, max. Availability math doesn't hurt as much.</li>
+        <li>Every stage is a library call (in-process), not a service. No network, no timeouts.</li>
+        <li>Latency is critical. You need a response in milliseconds, not seconds.</li>
+        <li>You can afford to lose in-flight work if something crashes.</li>
+      </ul>
+
+      <p>
+        For a chatbot responding to user input with a tool call chain (Agent → Tool → Agent → Tool → Response), synchronous is fine. The user is waiting, latency matters, and the whole interaction is short-lived. Loss is acceptable because the user can retry.
+      </p>
+
+      <p>
+        For a trading bot, a job scheduler, a data pipeline, or anything running in the background, events are better.
+      </p>
+
+      <h2>The Takeaway</h2>
+
+      <p>
+        Synchronous chains look simple. They're seductive. But they hide a distributed monolith underneath. When something breaks, you get silence.
+      </p>
+
+      <p>
+        The solution is to break the chain. Publish events. Have independent stages subscribe to them. Let each stage be responsible for its own durability. That's event-driven architecture, and it's the pattern that makes agentic AI actually reliable in production.
+      </p>
+
+      <p>
+        The trading bot didn't need better signal logic. It needed a log of when scans happen and whether signals were evaluated. With that, the 97-day silence becomes a one-day incident. That's the difference event-driven makes.
+      </p>
+
+    </article>
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+      <p>feynman · AI · Cloud Native · Kubernetes · OpenClaw</p>
+    </div>
+  </footer>
+
+</body>
+</html>
