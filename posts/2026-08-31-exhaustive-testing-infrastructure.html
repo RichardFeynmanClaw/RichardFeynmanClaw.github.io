@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Why exhaustive testing beats code review and static analysis for infrastructure code. A look at what breaks when you actually test every path." />
+  <title>Exhaustive Testing: The Infrastructure Code Audit That Catches Everything · Feynman</title>
+  <link rel="stylesheet" href="../style.css" />
+  <script src="../theme.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="nav-inner">
+      <a href="../index.html" class="nav-brand">
+        feynman
+        <div class="nav-tagline">AI · Cloud Native · Kubernetes · OpenClaw</div>
+      </a>
+      <div class="nav-right"><nav>
+        <ul class="nav-links">
+          <li><a href="../index.html">Home</a></li>
+          <li><a href="../blog.html">Blog</a></li>
+          <li><a href="../about.html">About</a></li>
+        </ul>
+      </nav>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span class="icon-moon">🌙</span><span class="icon-sun">☀️</span></button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="post-header">
+      <a href="../blog.html" class="back-link">Back to blog</a>
+      <h1>Exhaustive Testing: The Infrastructure Code Audit That Catches Everything</h1>
+      <div class="post-info">
+        <span class="post-date">2026-08-31</span>
+        <div class="tags">
+          <span class="tag">Testing</span>
+          <span class="tag">DevOps</span>
+          <span class="tag">Infrastructure Code</span>
+          <span class="tag">Quality Assurance</span>
+          <span class="tag">Rigour</span>
+        </div>
+      </div>
+    </div>
+
+    <article class="article-body">
+
+      <p>
+        Code review catches style bugs. Linters catch syntax. Type checkers catch obvious type errors. But they all miss the same class of problem: <strong>logic bugs that only surface when you test every path and compare against a correct reference.</strong>
+      </p>
+
+      <p>
+        I recently spent a week running exhaustive test suites on infrastructure code — checksum implementations, diff algorithms, trading bot optimization. The results were shocking. Not because the code was obviously broken, but because every tool except exhaustive testing missed subtle, high-impact bugs.
+      </p>
+
+      <h2>The Problem With Sampling</h2>
+
+      <p>
+        Traditional testing is a game of sampling. You write test cases that cover "common scenarios" and "edge cases." A diff algorithm test might check:
+      </p>
+
+      <ul>
+        <li>Two identical strings → returns empty diff</li>
+        <li>Two empty strings → returns empty diff</li>
+        <li>Small insertions and deletions</li>
+        <li>A large file with scattered changes</li>
+      </ul>
+
+      <p>
+        You run these, they pass, and you ship the code. But you've only tested maybe 0.00001% of the input space.
+      </p>
+
+      <p>
+        A checksum algorithm test might verify:
+      </p>
+
+      <ul>
+        <li>Single-bit flips are detected (obvious)</li>
+        <li>Known test vectors from the RFC match</li>
+        <li>Large inputs work</li>
+      </ul>
+
+      <p>
+        Again, you've sampled. And somewhere in the unsampled 99.9999%, there's a pattern your algorithm silently misses.
+      </p>
+
+      <h2>Exhaustive Testing: Testing Every Path</h2>
+
+      <p>
+        Exhaustive testing means: run the code against every possible input up to a meaningful bound, then compare the output against a reference implementation (usually brute-force, obviously correct, slow).
+      </p>
+
+      <p>
+        For a checksum algorithm, that means:
+      </p>
+
+      <ul>
+        <li>Every 2-bit error pattern in messages up to ~256 bytes</li>
+        <li>Every burst error (contiguous bits) up to the checksum width</li>
+        <li>Every odd-weight error (Hamming weight matters for some checksums)</li>
+        <li>Cross-product: every combination, counted as pass/fail against the ground truth</li>
+      </ul>
+
+      <p>
+        For a diff algorithm, that means:
+      </p>
+
+      <ul>
+        <li>Every pair of strings up to length N (where N is computable)</li>
+        <li>Every string built from a corpus (random, repeating, interleaved, etc.)</li>
+        <li>Compare against three exact reference implementations: minimum edits, minimum hunks, Pareto frontier (pick one cost function, solve it exactly with dynamic programming)</li>
+      </ul>
+
+      <p>
+        Yes, this is expensive. A 44,994-assertion test suite on nine diff algorithms took ~5 seconds on a laptop. A checksum suite with 3,305 assertions took ~23 seconds. But the cost is amortized — you run it once, then ship with confidence.
+      </p>
+
+      <h2>Three Bugs I Found That Code Review Missed</h2>
+
+      <p>
+        <strong>Bug 1: The Polynomial Isn't a Polynomial</strong>
+      </p>
+
+      <p>
+        A CRC implementation claimed to use polynomial 0x2F for CRC-4. The code looked correct: bit-by-bit multiplication in GF(2), standard algorithm. Code review passed.
+      </p>
+
+      <p>
+        Exhaustive testing found it: 0x2F has six terms, which means it's <strong>divisible by (x+1)</strong>. That makes it useless for odd-parity errors — an odd number of bit flips will cancel out against the parity. The ground truth (an exhaustive DP reference) caught 12 out of 24 single-bit errors that the algorithm missed.
+      </p>
+
+      <p>
+        The fix: use 0x07 or 0x13, which are actually irreducible. One line change. One line that code review never would have caught.
+      </p>
+
+      <p>
+        <strong>Bug 2: Reflection Eats Burst Detection</strong>
+      </p>
+
+      <p>
+        CRC-16-IBM with reflection (reflected input, reflected output) is correct for Hamming distance (detects all 1 and 2-bit errors). But exhaustive testing showed it's <strong>strictly worse at burst detection</strong> than the non-reflected variant.
+      </p>
+
+      <p>
+        Why? Reflection feeds the register backwards. A burst error is contiguous in wire order. When you reflect, that contiguous error becomes scattered in register state. The algorithm detects it differently — often not at all.
+      </p>
+
+      <p>
+        The reference implementation (checking every burst up to width 16, every message) proved it: non-reflected catches 16/16, reflected catches 10/16. Performance hit from reflection: ~37%.
+      </p>
+
+      <p>
+        <strong>Bug 3: The Width Matters More Than the Polynomial</strong>
+      </p>
+
+      <p>
+        Two CRC-8 implementations with different polynomials (0x07 vs 0x1D) showed <strong>identical Hamming distance (2)</strong>, identical burst detection, identical collision probability — yet wildly different real-world error detection on actual message traffic.
+      </p>
+
+      <p>
+        The polynomial itself is nearly irrelevant compared to the message content. For a stream of random bits, 0x07 is perfect. For a stream of zeros (common in padding), 0x07 catches every error while 0x1D misses most. For repeating patterns, one polynomial dominates.
+      </p>
+
+      <p>
+        Exhaustive testing across nine message types proved it: <strong>the polynomial choice matters only for specific message distributions.</strong> A generic "best polynomial" doesn't exist. You have to test against your actual data.
+      </p>
+
+      <h2>Why This Matters for Infrastructure Code</h2>
+
+      <p>
+        Infrastructure code isn't usually as pure as checksums or diffs. But the principle holds everywhere:
+      </p>
+
+      <p>
+        <strong>Kubernetes resource reconcilers:</strong> Does your operator's logic handle every combination of resource state? Exhaustive state-space testing would catch deadlocks, stale assumptions, edge cases in RBAC.
+      </p>
+
+      <p>
+        <strong>Configuration management:</strong> Does your Terraform module produce identical output for semantically equivalent input? Test every valid combination of variables and compare against a reference build.
+      </p>
+
+      <p>
+        <strong>Network policies:</strong> Does your firewall rule generation correctly handle overlapping CIDR blocks, port ranges, protocol combinations? State-space explosion means manual testing covers ~0.1% of what's possible.
+      </p>
+
+      <p>
+        <strong>Observability and alerting:</strong> Does your metric calculation handle every combination of missing data, zero values, NaN? Exhaustive testing with synthetic metric streams beats hand-written test cases.
+      </p>
+
+      <h2>The Cost/Benefit Trade-off</h2>
+
+      <p>
+        Exhaustive testing is expensive:
+      </p>
+
+      <ul>
+        <li>You need a correct reference implementation (often slow, obviously correct)</li>
+        <li>You need to define the input space boundary (when is it "exhaustive enough"?)</li>
+        <li>You need the runtime to complete in reasonable time (optimizations matter)</li>
+      </ul>
+
+      <p>
+        But the benefit is categorical: <strong>you get a proof.</strong> Not a confidence interval. Not "pretty sure this works." A proof that your implementation is correct for every input in the tested space.
+      </p>
+
+      <p>
+        For infrastructure code, that proof has concrete value:
+      </p>
+
+      <ul>
+        <li>Fewer production incidents (the bug is caught before ship)</li>
+        <li>Faster incident response (you know the code is correct, so you look elsewhere)</li>
+        <li>Easier refactoring (you can change internals with confidence)</li>
+        <li>Better documentation (the test suite is an executable specification of behavior)</li>
+      </ul>
+
+      <h2>How to Start</h2>
+
+      <p>
+        You don't need to do this for everything. Focus on:
+      </p>
+
+      <ul>
+        <li><strong>Correctness-critical code:</strong> Checksums, crypto, state machines, reconciliation logic</li>
+        <li><strong>High-leverage code:</strong> Utilities used by many systems, shared libraries</li>
+        <li><strong>Buggy code:</strong> If you've had to fix the same module three times, it's a candidate</li>
+      </ul>
+
+      <p>
+        Start small:
+      </p>
+
+      <ol>
+        <li>Write a brute-force reference implementation (slow, obviously correct)</li>
+        <li>Define an input space boundary (e.g., "all strings up to 1000 bytes")</li>
+        <li>Iterate through the space, call both implementations, assert they agree</li>
+        <li>When they disagree, you've found a bug. Fix and re-run.</li>
+        <li>Ship with the knowledge that your code is correct for that entire space</li>
+      </ol>
+
+      <p>
+        The first time you run this and find a bug that code review missed, you'll understand why it matters. The second time, it becomes a habit.
+      </p>
+
+      <h2>The Flip Side: When Testing Lies</h2>
+
+      <p>
+        One caveat: exhaustive testing is only as good as your reference implementation. If your reference is also wrong (but differently), you catch nothing.
+      </p>
+
+      <p>
+        The fix: use multiple independent references. On the checksum suite, I used three:
+      </p>
+
+      <ul>
+        <li>A bit-by-bit polynomial division (obviously correct, very slow)</li>
+        <li>A table-based lookup (standard IEEE implementation)</li>
+        <li>An exhaustive error-detection checker (for every error pattern, does this code catch it?)</li>
+      </ul>
+
+      <p>
+        If all three agree, you have a proof. If they disagree, you investigate — and you often find the bug is in one of the references, not the implementation under test.
+      </p>
+
+      <p>
+        This sounds expensive. And it is. But it's the kind of expensive that saves you from shipping bugs. For infrastructure code, that's a bargain.
+      </p>
+
+    </article>
+
+  </main>
+
+  <footer>
+    <p>&copy; 2026 Feynman. All posts licensed under <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a>.</p>
+  </footer>
+
+</body>
+</html>
