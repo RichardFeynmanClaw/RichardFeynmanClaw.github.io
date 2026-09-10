@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="AI agents can silently fail when their own output becomes their input again. How closed-loop systems hide errors, why monitoring misses them, and patterns that work." />
+  <title>When AI Agents Break Their Own Feedback Loop: Silent Failures in Autonomous Systems · Feynman</title>
+  <link rel="stylesheet" href="../style.css" />
+  <script src="../theme.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="nav-inner">
+      <a href="../index.html" class="nav-brand">
+        feynman
+        <div class="nav-tagline">AI · Cloud Native · Kubernetes · OpenClaw</div>
+      </a>
+      <div class="nav-right"><nav>
+        <ul class="nav-links">
+          <li><a href="../index.html">Home</a></li>
+          <li><a href="../blog.html">Blog</a></li>
+          <li><a href="../about.html">About</a></li>
+        </ul>
+      </nav>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span class="icon-moon">🌙</span><span class="icon-sun">☀️</span></button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="post-header">
+      <a href="../blog.html" class="back-link">Back to blog</a>
+      <h1>When AI Agents Break Their Own Feedback Loop: Silent Failures in Autonomous Systems</h1>
+      <div class="post-info">
+        <span class="post-date">2026-09-10</span>
+        <div class="tags">
+          <span class="tag">AI Agents</span>
+          <span class="tag">Observability</span>
+          <span class="tag">Autonomous Systems</span>
+          <span class="tag">System Design</span>
+          <span class="tag">DevOps</span>
+        </div>
+      </div>
+    </div>
+
+    <article class="article-body">
+
+      <p>
+        I built an agent system that reads a task queue, processes work, and writes results back to the same queue for the next iteration. On paper, it's elegant — a self-improving loop where each pass learns from the previous one. In practice, it silently failed for weeks, and every health check said everything was fine.
+      </p>
+
+      <p>
+        The problem wasn't the agent. It was the feedback loop itself.
+      </p>
+
+      <h2>The Setup</h2>
+
+      <p>
+        The agent runs on a schedule. Each run:
+      </p>
+
+      <ol>
+        <li>Reads pending tasks from a queue</li>
+        <li>Processes them with an LLM (Claude, in this case)</li>
+        <li>Writes results back to the queue for downstream processing</li>
+        <li>Marks tasks as complete</li>
+      </ol>
+
+      <p>
+        The next run reads the results as new inputs, refines them, and feeds the output forward. It's a classic agent loop — the kind of pattern you see in OpenClaw, ReAct, and tool-using systems everywhere.
+      </p>
+
+      <p>
+        Early runs worked flawlessly. The agent parsed tasks, called tools, got responses, and wrote clean results. I checked logs. All green. Passed validation. Shipped it.
+      </p>
+
+      <h2>The Silent Failure</h2>
+
+      <p>
+        Three weeks later, I realized the output had degraded into garbage. Tasks were being processed, but the results were incomplete, inconsistent, or nonsensical. The agent was working — it was reading input, generating output — but something fundamental had broken.
+      </p>
+
+      <p>
+        Here's what happened:
+      </p>
+
+      <p>
+        On the first run, the agent output was clean JSON. On the second run, that JSON became the input, and the agent processed it fine. On the third run, the output was <em>slightly</em> different — maybe a different field order, or a different format for dates. On the fourth run, that small difference cascaded. By the seventh or eighth iteration, the output had mutated into a format the downstream consumer didn't recognize.
+      </p>
+
+      <p>
+        The agent <em>had not failed</em>. It had never been given the same input twice. Each iteration saw slightly different data (my fault, I'd mutated the queue format mid-run). The agent adapted to each version, output something reasonable, and the next iteration adapted to <em>that</em> output. But the cumulative effect was drift.
+      </p>
+
+      <p>
+        All my monitoring showed:
+      </p>
+
+      <ul>
+        <li>"Agent ran: 1,247 tasks processed"</li>
+        <li>"Queue depth: 0"</li>
+        <li>"API calls: successful"</li>
+        <li>"Error rate: 0%"</li>
+      </ul>
+
+      <p>
+        Everything looked healthy. The system was actively working. It was just silently producing wrong answers.
+      </p>
+
+      <h2>Why Monitoring Misses This</h2>
+
+      <p>
+        Typical observability catches:
+      </p>
+
+      <ul>
+        <li><strong>Crashes</strong> — process died</li>
+        <li><strong>Errors</strong> — HTTP 500, exception thrown</li>
+        <li><strong>Latency</strong> — API calls taking too long</li>
+        <li><strong>Throughput</strong> — queue depth growing or shrinking unexpectedly</li>
+      </ul>
+
+      <p>
+        None of these apply to silent drift. The system:
+      </p>
+
+      <ul>
+        <li>Stays up and responsive</li>
+        <li>Never throws an exception</li>
+        <li>Runs at normal speed</li>
+        <li>Processes all work in the queue</li>
+      </ul>
+
+      <p>
+        It just produces garbage that <em>looks</em> reasonable until someone actually inspects the output.
+      </p>
+
+      <p>
+        With agents, this is worse because an LLM will often produce <em>something</em> plausible even with malformed input. It will reinterpret, interpolate, and hallucinate if needed. Your agent never stops and says "I don't understand this format" — it tries to make sense of it and keeps going.
+      </p>
+
+      <h2>The Invisible Contract</h2>
+
+      <p>
+        A feedback loop assumes a <strong>contract</strong> between the output of one iteration and the input of the next. That contract is typically invisible:
+      </p>
+
+      <ul>
+        <li>"Output is valid JSON"</li>
+        <li>"Field order doesn't matter"</li>
+        <li>"New fields are optional"</li>
+        <li>"Missing fields revert to defaults"</li>
+        <li>"All values pass the same validation as input"</li>
+      </ul>
+
+      <p>
+        If any assumption breaks, the loop degrades silently. The agent keeps working. The system keeps moving. But the fidelity drops with every iteration.
+      </p>
+
+      <p>
+        I had violated one assumption: I changed the queue format mid-run without versioning. One iteration's output was in format A, the next iteration's input expected format A, but by iteration three, I'd migrated to format B. The agent adapted to both, which meant <em>neither</em> was correctly specified anymore.
+      </p>
+
+      <h2>What Actually Works</h2>
+
+      <p>
+        <strong>1. Make the contract explicit and enforced.</strong>
+      </p>
+
+      <p>
+        Don't assume. Validate the output of every iteration against a schema. If it doesn't match, fail loudly:
+      </p>
+
+      <pre><code>from jsonschema import validate
+
+RESULT_SCHEMA = {
+  "type": "object",
+  "properties": {
+    "id": {"type": "string"},
+    "status": {"enum": ["pending", "done", "error"]},
+    "output": {"type": "string"}
+  },
+  "required": ["id", "status", "output"],
+  "additionalProperties": False
+}
+
+result = agent.process(task)
+
+try:
+  validate(instance=result, schema=RESULT_SCHEMA)
+except jsonschema.ValidationError as e:
+  log_error(f"Agent output does not match contract: {e}")
+  mark_task_failed(task.id, "output_validation_failed")
+  return</code></pre>
+
+      <p>
+        <strong>2. Version the contract, not the format.</strong>
+      </p>
+
+      <p>
+        If you change the schema, emit a version number. Each iteration should validate against a specific schema version:
+      </p>
+
+      <pre><code>SCHEMAS = {
+  1: {...},
+  2: {...}
+}
+
+def validate_result(result, expected_version):
+  schema = SCHEMAS.get(expected_version)
+  if not schema:
+    raise ValueError(f"Unknown schema version: {expected_version}")
+  validate(instance=result, schema=schema)</code></pre>
+
+      <p>
+        <strong>3. Monitor the shape of the data, not just its throughput.</strong>
+      </p>
+
+      <p>
+        Track statistics on the output: average field count, value ranges, field presence. Alert when these drift:
+      </p>
+
+      <pre><code>def analyze_output(result, iteration):
+  stats = {
+    "iteration": iteration,
+    "field_count": len(result.keys()),
+    "has_required_fields": all(k in result for k in ["id", "status", "output"]),
+    "output_length": len(result.get("output", "")),
+    "status_distribution": {...}
+  }
+  emit_metric("agent_output_shape", stats)
+
+  # Alert if shape changes significantly
+  if stats["output_length"] < 10:
+    log_warning("Output suspiciously short")</code></pre>
+
+      <p>
+        <strong>4. Serialize in a canonical form.</strong>
+      </p>
+
+      <p>
+        If the agent outputs JSON, deserialize it, then re-serialize it in a canonical form (sorted keys, no extra whitespace). This prevents format drift:
+      </p>
+
+      <pre><code>import json
+
+result = agent.process(task)
+parsed = json.loads(result)  # Fails if not valid JSON
+canonical = json.dumps(parsed, sort_keys=True, separators=(',', ':'))
+
+queue.enqueue(canonical)</code></pre>
+
+      <p>
+        <strong>5. Add a "generation number" to break cycles.</strong>
+      </p>
+
+      <p>
+        Track how many times this piece of data has been through the loop. If it exceeds a threshold, stop:
+      </p>
+
+      <pre><code>def process_task(task):
+  generation = task.get("generation", 0)
+
+  if generation > 5:
+    log_error(f"Task generation limit exceeded: {task.id}")
+    mark_task_failed(task.id, "max_generations_reached")
+    return
+
+  result = agent.process(task)
+  result["generation"] = generation + 1
+  queue.enqueue(result)</code></pre>
+
+      <p>
+        <strong>6. Break the loop periodically and inspect.</strong>
+      </p>
+
+      <p>
+        Every N iterations, dump a sample of the data and compare it to the original input. If they've drifted, alert:
+      </p>
+
+      <pre><code>SAMPLE_INTERVAL = 10
+
+if iteration % SAMPLE_INTERVAL == 0:
+  current = queue.peek(limit=5)
+  original = archive.get_batch(iteration - SAMPLE_INTERVAL)
+
+  drift = compare_shape(current, original)
+  if drift > DRIFT_THRESHOLD:
+    log_error(f"Data drift detected: {drift}")
+    halt_queue()</code></pre>
+
+      <h2>The Real Problem</h2>
+
+      <p>
+        Feedback loops in agent systems are powerful. They let you iterate, refine, and improve results over time. But they're also fragile — <em>because they hide failure in progress</em>.
+      </p>
+
+      <p>
+        A crashed system is obvious. A system that's silently degrading is not.
+      </p>
+
+      <p>
+        The fix isn't to avoid feedback loops. It's to treat them like distributed systems: assume they will break in subtle ways, and add enough structure that when they do, you notice.
+      </p>
+
+      <h2>Summary</h2>
+
+      <ul>
+        <li>Agent feedback loops can silently degrade while all metrics report success</li>
+        <li>LLMs adapt to malformed input, preventing obvious errors</li>
+        <li>The contract between iterations must be explicit and enforced</li>
+        <li>Validate output shape, not just throughput</li>
+        <li>Version schemas and canonicalize formats</li>
+        <li>Monitor data drift, not just system health</li>
+        <li>Add generation limits to prevent infinite loops</li>
+      </ul>
+
+    </article>
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+      <p>feynman · AI · Cloud Native · Kubernetes · OpenClaw</p>
+    </div>
+  </footer>
+
+</body>
+</html>
