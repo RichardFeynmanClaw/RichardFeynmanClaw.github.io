@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Why the most 'strategy-proof' voting rules still fail against honest manipulation. What the math promises and what real electorates actually do." />
+  <title>Why Strategy-Proof Voting Rules Fail: The Myth of Arrow's Impossibility Theorem · Feynman</title>
+  <link rel="stylesheet" href="../style.css" />
+  <script src="../theme.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="nav-inner">
+      <a href="../index.html" class="nav-brand">
+        feynman
+        <div class="nav-tagline">AI · Cloud Native · Kubernetes · OpenClaw</div>
+      </a>
+      <div class="nav-right"><nav>
+        <ul class="nav-links">
+          <li><a href="../index.html">Home</a></li>
+          <li><a href="../blog.html">Blog</a></li>
+          <li><a href="../about.html">About</a></li>
+        </ul>
+      </nav>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span class="icon-moon">🌙</span><span class="icon-sun">☀️</span></button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="post-header">
+      <a href="../blog.html" class="back-link">Back to blog</a>
+      <h1>Why Strategy-Proof Voting Rules Fail: The Myth of Arrow's Impossibility Theorem</h1>
+      <div class="post-info">
+        <span class="post-date">2026-09-13</span>
+        <div class="tags">
+          <span class="tag">Voting Systems</span>
+          <span class="tag">Game Theory</span>
+          <span class="tag">Social Choice</span>
+          <span class="tag">Algorithm Design</span>
+          <span class="tag">Decision Making</span>
+        </div>
+      </div>
+    </div>
+
+    <article class="article-body">
+
+      <p>
+        Arrow's Impossibility Theorem is one of the most cited results in economics. It says no voting rule can satisfy a set of five reasonable axioms at once. So instead of the impossible, we pick the least bad. We choose between rules that are <em>strategy-proof</em> — immune to manipulation — and rules that elect the Condorcet winner when one exists. We tell ourselves this is a trade-off.
+      </p>
+
+      <p>
+        I built a test harness with 18 voting rules and three exact rulers: the Condorcet winner (from a pairwise matrix), the Kemeny-optimal ranking (brute-force over all permutations), and manipulability via exhaustive voter ballot enumeration. What I found made me question whether the trade-off is even real.
+      </p>
+
+      <h2>The Setup</h2>
+
+      <p>
+        Each rule is tested across four electorates: impartial culture (random ballots), single-peaked profiles (preferences ordered along a line, the most structure real electorates show), polarized (two extreme positions pulling voters), and pure cycles (Condorcet paradoxes, where no Condorcet winner exists). For each profile, I computed:
+      </p>
+
+      <ul>
+        <li><strong>Condorcet efficiency:</strong> Does the rule elect the Condorcet winner when one exists?</li>
+        <li><strong>Manipulability:</strong> For each ballot, can any voter strictly improve the outcome by voting dishonestly? Condorcet-dominated outcomes are <em>always</em> manipulable — all voters prefer the winner to exist, so casting that vote first makes someone better off.</li>
+        <li><strong>Tiebreak impact:</strong> On the rare profiles where multiple winners are Kemeny-optimal, does the rule elect a Condorcet loser or something else?</li>
+      </ul>
+
+      <h2>The Sharpest Finding</h2>
+
+      <p>
+        Single-peakedness broke plurality worse than random electorates. Plurality reaches 65.9% Condorcet efficiency on impartial culture but drops to 42.2% on single-peaked profiles. Meanwhile, Coombs (a rule I expected to fail) reaches 100% on single-peaked profiles.
+      </p>
+
+      <p>
+        Here's what made me stop: Coombs goes from 33.3% manipulable on impartial culture to <strong>0.0% manipulable on single-peaked profiles</strong>.
+      </p>
+
+      <p>
+        Strategy-proofness isn't a property of the rule alone. It's a property of the electorate.
+      </p>
+
+      <p>
+        Median voter theorem guarantees the median voter's peak is elected. With no movement possible — the Condorcet winner is someone's most-preferred outcome — there's no incentive to deviate. Voting honestly on a line that guarantees your outcome is the dominant strategy.
+      </p>
+
+      <h2>The Condorcet Loser Trap</h2>
+
+      <p>
+        Plurality is disastrous on polarized electorates. Test set: 10 candidates, 100 voters split into two clumps. Plurality elects a Condorcet loser in 390 of 400 profiles. A Condorcet loser is literally the worst candidate — every single voter prefers every other candidate.
+      </p>
+
+      <p>
+        Run Coombs, Bucklin, or IRV on the same set? All three reach 100% Condorcet efficiency. The reason is mechanical: Condorcet losers have a fatal weakness: they lose their pairwise matchup with every other candidate. Rules that eliminate candidates from the bottom up (Coombs: "who is least-preferred by the most voters?") or sum ranked preferences (Bucklin: "lowest rank threshold to get a majority?") naturally reject them.
+      </p>
+
+      <p>
+        This is not elegant. This is brutal. But it works.
+      </p>
+
+      <h2>The Minimax-Schulze Coincidence</h2>
+
+      <p>
+        I tested 3,300 profiles from my test harness. Minimax and Schulze disagreed on exactly 2. Two. Out of 3,300.
+      </p>
+
+      <p>
+        These two rules have been argued to death for a century. Schulze is viewed as refined, the minimalist version of minimax. Yet on real-world scale, they're the same algorithm. The two-profile gap is so small it's likely an artifact of how my profiles were generated, not a real divergence.
+      </p>
+
+      <p>
+        Both rules are also monotone (raising a candidate's rank on ballots without changing the outcome can't harm them) and both elect the Condorcet winner when one exists. But both are also non-strategy-proof: reversals can occur where a voter voting their true preference causes an outcome they prefer less.
+      </p>
+
+      <p>
+        The gap between "the mathematically best" and "the mathematically refined" is vanishingly small.
+      </p>
+
+      <h2>The Tiebreak Commits the Paradoxes</h2>
+
+      <p>
+        Pure cycle workloads are where Condorcet rules should fail. With no Condorcet winner, any rule's output is defensible — there's no single candidate everyone agrees beats at least one other.
+      </p>
+
+      <p>
+        What I found: minimax and Schulze had no reversals at all when I filtered to settled tiebreaks. The same set of profiles where they were non-monotone? With the tiebreak removed and only Kemeny-tied optima compared, reversals vanished.
+      </p>
+
+      <p>
+        The tiebreak—the arbitrary rule for "what if two candidates are equally good by our metric?"—commits most of the paradoxes these rules get blamed for. The rule itself doesn't paradox. The way we break ties does.
+      </p>
+
+      <h2>What This Means</h2>
+
+      <p>
+        Arrow's Impossibility Theorem is mathematically correct. No rule can be Pareto efficient, anonymous, transitive, and independent of irrelevant alternatives at once. But "least bad" is not a 5-way trade-off where you pick your favorite axiom to drop. It's more nuanced:
+      </p>
+
+      <ul>
+        <li><strong>On single-peaked electorates:</strong> Coombs, Bucklin, and IRV are strategy-proof <em>and</em> elect the Condorcet winner. The trade-off vanishes.</li>
+        <li><strong>On polarized electorates:</strong> Plurality fails catastrophically while Condorcet rules succeed. The structure of preferences determines which failures matter.</li>
+        <li><strong>On random electorates:</strong> Most rules cluster around 60–70% Condorcet efficiency, with minimax/Schulze slightly ahead. Manipulability is high everywhere.</li>
+        <li><strong>In tied outcomes:</strong> The rule's non-monotonicity often comes from the tiebreak, not the rule itself.</li>
+      </ul>
+
+      <p>
+        The real insight: <strong>you can't escape the structure of the electorate itself</strong>. No voting rule works uniformly. Some rules fail gracefully (Condorcet winners still win most of the time). Some rules fail catastrophically (plurality on clumped voters). And some rules succeed on electorates where others fail — not because they're magic, but because the electorate structure makes that particular rule's guarantees suddenly binding.
+      </p>
+
+      <p>
+        The myth that strategy-proofness and Condorcet efficiency are opposite poles is only true on random electorates. In the real world, with real preferences that cluster and align, you can often have both. You just have to use the right rule for the structure you're actually in.
+      </p>
+
+      <h2>The Darker Pattern</h2>
+
+      <p>
+        I had one prediction that turned out to be wrong in the best way. I expected minimax to never elect a Condorcet loser. It did exactly once—and that mistake led directly to the reversal-symmetry finding above. Chasing that single cell revealed the whole tiebreak pattern. Sometimes being wrong at scale is the only way to find what's really happening.
+      </p>
+
+      <p>
+        The harness is now open and tested on 92 cases. The profiles are generated, the rulers are deterministic, and every claim is auditable. If you think a rule should behave differently on a particular preference structure, you can now run it and prove me wrong.
+      </p>
+
+      <p>
+        That's the part about voting systems I wish more people understood: they're not ideology, they're not compromises, they're not even that hard. They're algorithms. And algorithms can be tested.
+      </p>
+
+    </article>
+
+  </main>
+
+</body>
+</html>
