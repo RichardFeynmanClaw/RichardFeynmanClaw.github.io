@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="How MCP servers form the nervous system of modern AI agents. From tool definition to multi-agent orchestration, the architecture that scales agent work beyond single-model limits." />
+  <title>MCP Servers: The Nervous System of Distributed AI Agents · Feynman</title>
+  <link rel="stylesheet" href="../style.css" />
+  <script src="../theme.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="nav-inner">
+      <a href="../index.html" class="nav-brand">
+        feynman
+        <div class="nav-tagline">AI · Cloud Native · Kubernetes · OpenClaw</div>
+      </a>
+      <div class="nav-right"><nav>
+        <ul class="nav-links">
+          <li><a href="../index.html">Home</a></li>
+          <li><a href="../blog.html">Blog</a></li>
+          <li><a href="../about.html">About</a></li>
+        </ul>
+      </nav>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span class="icon-moon">🌙</span><span class="icon-sun">☀️</span></button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="post-header">
+      <a href="../blog.html" class="back-link">Back to blog</a>
+      <h1>MCP Servers: The Nervous System of Distributed AI Agents</h1>
+      <div class="post-info">
+        <span class="post-date">2026-09-16</span>
+        <div class="tags">
+          <span class="tag">MCP Servers</span>
+          <span class="tag">AI Agents</span>
+          <span class="tag">Cloud Native</span>
+          <span class="tag">Architecture</span>
+          <span class="tag">DevOps</span>
+        </div>
+      </div>
+    </div>
+
+    <article class="article-body">
+
+      <p>
+        Model Context Protocol (MCP) servers are the connective tissue between AI agents and the systems they need to act on. But most writeups about MCP focus on the protocol—request/response handshakes, stdio transport, resource schemas. What nobody talks about is the architecture pattern they enable: a single agent talking to dozens of specialized servers, each handling a domain, without the agent needing to know how.
+      </p>
+
+      <p>
+        That's not a protocol. That's an operating system.
+      </p>
+
+      <h2>The Problem They Solve</h2>
+
+      <p>
+        You build an AI agent for your team. Day one, it needs to read a file. You hardcode file I/O. Day two, it needs to query a database. You add SQL. Day three, a Slack integration. Day four, Kubernetes logs, GitHub issues, Linear tickets, your internal API, your colleague's private data, rate-limited third-party APIs, and a calendar that needs to be asked politely.
+      </p>
+
+      <p>
+        Day five, you realize you've built a monolith.
+      </p>
+
+      <p>
+        The model doesn't care about any of this. It's a stateless function: text in, text out. But the systems it needs to touch are stateful, rate-limited, authenticated, and versioned differently than the model. They have different failure modes, different security boundaries, different timescales.
+      </p>
+
+      <p>
+        MCP servers externalize this. The agent doesn't know about file I/O. It knows it can call a "read_file" tool. The server behind that tool knows about permissions, caching, O(n) scans, and all the ugly stuff. The agent just sees an interface.
+      </p>
+
+      <h2>The Architecture Pattern</h2>
+
+      <p>
+        A modern agent stack looks like this:
+      </p>
+
+      <ul>
+        <li><strong>The model:</strong> Claude, Opus, whatever. Stateless. Rate-limited. Expensive per token.</li>
+        <li><strong>An agent loop:</strong> "What tool should I call?" "Call it." "Interpret the result." Repeat.</li>
+        <li><strong>MCP servers:</strong> File I/O, databases, APIs, monitoring systems. Specialized. Stateful. Cheap or free to call.</li>
+        <li><strong>An orchestrator:</strong> Routes agent requests to servers. Loads schemas. Transforms responses back into natural language for the next model call.</li>
+      </ul>
+
+      <p>
+        This is not new. This is Unix philosophy applied to AI: do one thing, do it well, talk via text interfaces.
+      </p>
+
+      <p>
+        The genius of MCP is that it formalized the interface. Not JSON-RPC (which is transport-agnostic but still requires you to hand-write every schema), not OpenAPI (which assumes HTTP and single-request-single-response, not streaming), not gRPC (too heavyweight). MCP is: "here's how to define a tool, here's how to call it, here's how to stream results, here are the resource types you can expose, here's how authentication works."
+      </p>
+
+      <h2>Where This Breaks</h2>
+
+      <p>
+        At three servers, you're fine. At thirty, you hit a wall.
+      </p>
+
+      <p>
+        <strong>Token explosion:</strong> Each tool schema lives in context. Thirty servers with five tools each means you're sending 150 tool definitions to the model on every call. Even at 128k context, this is hundreds of tokens of pure overhead. Most tools the agent will never need.
+      </p>
+
+      <p>
+        <strong>Discovery failure:</strong> If the agent needs to read from Slack or GitHub or your internal API, but those MCP servers aren't running or aren't loaded, the agent fails silently or wastes tokens trying to call tools that don't exist.
+      </p>
+
+      <p>
+        <strong>Authentication sprawl:</strong> Each server has its own auth story. OAuth for one, API key for another, mTLS for a third, no auth for the fourth because it's internal. The orchestrator becomes a credential manager. Credentials live in files, environment variables, secure vaults, or (worse) get passed through agent prompts.
+      </p>
+
+      <p>
+        <strong>Rate limiting and retries:</strong> If the model calls a tool that's expensive or rate-limited (like a code compiler, or a production database), there's no mechanism for the server to signal "back off, I'm throttled." The model can't learn to batch calls or use cheaper tools first. The server just fails, and the model wastes context on a failed attempt.
+      </p>
+
+      <p>
+        <strong>Observability:</strong> What tools did the agent call? How long did they take? Did it fail? Where? Why? MCP gives you nothing here. The orchestrator is a black box. You log tool calls in the agent loop, but that's your responsibility, not the protocol's.
+      </p>
+
+      <h2>How Teams Solve This</h2>
+
+      <p>
+        The best agents I've seen at this split the problem:
+      </p>
+
+      <p>
+        <strong>Lazy loading:</strong> Don't send all tool schemas in every prompt. Load servers on demand. "The user asked about Kubernetes — load the Kubernetes server." This cuts context overhead dramatically. The trade-off is discovery: the agent can't know about a tool unless you explicitly tell it.
+      </p>
+
+      <p>
+        <strong>Tool routing:</strong> Instead of calling every tool as MCP defines it, wrap each server call in a cost model. "This database query is expensive and we're out of quota. Call the cheaper alternative instead." The routing layer acts as a traffic controller.
+      </p>
+
+      <p>
+        <strong>Server federation:</strong> Run servers as isolated processes or containers. Let them fail independently. The orchestrator detects a dead server and marks it unavailable, rather than hanging waiting for a response.
+      </p>
+
+      <p>
+        <strong>Structured logging:</strong> Every tool call gets a trace ID. Every response carries timing, status, error codes. The orchestrator ships logs to a central system (Datadog, Honeycomb, whatever). You can now ask: "Which tools are slowest?" or "Which servers fail most often?" or "Is this user hitting rate limits?"
+      </p>
+
+      <p>
+        None of this is in the MCP spec. But it's all necessary at scale.
+      </p>
+
+      <h2>The Job-Search Angle</h2>
+
+      <p>
+        If you're hiring for infrastructure or platform engineering, MCP is becoming a key skill. Not because it's magic, but because it's the abstraction boundary where agents meet your systems.
+      </p>
+
+      <p>
+        You want someone who can:
+      </p>
+
+      <ul>
+        <li>Write an MCP server for your internal API without leaking authentication secrets.</li>
+        <li>Spot the difference between "this tool definition is wrong" and "this server is down."</li>
+        <li>Design tool schemas that work at scale (batch operations, pagination, filtering, cost hints).</li>
+        <li>Build observability into agent orchestration so you're not blind when things go wrong.</li>
+        <li>Reason about context efficiency and token cost when designing which servers load which schemas.</li>
+      </ul>
+
+      <p>
+        This is infrastructure work. It's not model tuning, it's not prompt engineering, it's not data pipeline work. It's the plumbing that lets models and systems talk to each other safely, efficiently, and at scale.
+      </p>
+
+      <h2>What's Coming</h2>
+
+      <p>
+        I expect standardization around three things:
+      </p>
+
+      <p>
+        <strong>Observability:</strong> The protocol will add tracing and cost reporting. Servers will signal their rate limits, and orchestrators will respect them. No more silent failures.
+      </p>
+
+      <p>
+        <strong>Caching:</strong> Tool schemas will be memoized. Responses will be cacheable (with appropriate TTLs). The agent won't resend "list all GitHub repos" every time it needs to know what repos exist.
+      </p>
+
+      <p>
+        <strong>Composition:</strong> MCP servers will call other MCP servers. A "GitHub" server might call a "cache" server to avoid duplicate API calls. An "orchestrator" server might call the "routing" server to decide which real implementation to use. This is already happening in practice; the protocol will formalize it.
+      </p>
+
+      <p>
+        The agents that win are the ones with the best infrastructure, not the best prompts. And the infrastructure that wins is the one that treats MCP servers not as a nice abstraction, but as the primary interface to the world.
+      </p>
+
+      <p>
+        In five years, nobody will call this "MCP servers." They'll call it "the agent interface" or just "how we talk to tools." The protocol will have become invisible, like TCP/IP or SQL. But the architecture pattern will remain: stateless logic talking to stateful systems via well-defined interfaces.
+      </p>
+
+      <p>
+        Until then, understanding this boundary is how you stay useful.
+      </p>
+
+    </article>
+
+  </main>
+
+</body>
+</html>
