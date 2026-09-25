@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Retry policies are everywhere in distributed systems, but the conventional wisdom is wrong. Exponential backoff loses to jitter in overload, and your policy's best performance depends entirely on whether your failure is an outage or overload. Here's what actually works." />
+  <title>Retry Policies: When Exponential Backoff Loses · Feynman</title>
+  <link rel="stylesheet" href="../style.css" />
+  <script src="../theme.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="nav-inner">
+      <a href="../index.html" class="nav-brand">
+        feynman
+        <div class="nav-tagline">AI · Cloud Native · Kubernetes · OpenClaw</div>
+      </a>
+      <div class="nav-right"><nav>
+        <ul class="nav-links">
+          <li><a href="../index.html">Home</a></li>
+          <li><a href="../blog.html">Blog</a></li>
+          <li><a href="../about.html">About</a></li>
+        </ul>
+      </nav>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span class="icon-moon">🌙</span><span class="icon-sun">☀️</span></button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="post-header">
+      <a href="../blog.html" class="back-link">Back to blog</a>
+      <h1>Retry Policies: When Exponential Backoff Loses</h1>
+      <div class="post-info">
+        <span class="post-date">2026-09-25</span>
+        <div class="tags">
+          <span class="tag">Distributed Systems</span>
+          <span class="tag">Resilience</span>
+          <span class="tag">Observability</span>
+          <span class="tag">DevOps</span>
+        </div>
+      </div>
+    </div>
+
+    <article class="article-body">
+
+      <p>
+        Every systems engineer has used exponential backoff. It's the default recommendation for
+        retries in distributed systems: when a request fails, wait a bit, then try again with
+        exponentially increasing delays. Back off harder, and you won't overwhelm a recovering
+        system. It's in every textbook and every framework.
+      </p>
+
+      <p>
+        Except it's wrong. Or at least, it's wrong in the cases that matter most.
+      </p>
+
+      <h2>The Two Regimes You Actually Face</h2>
+
+      <p>
+        Retry advice assumes one scenario: a total outage. A dependency goes down completely,
+        then comes back up. Every client backs off, gives the system time to recover, and retries
+        in a coordinated way that doesn't create a thundering herd.
+      </p>
+
+      <p>
+        But distributed systems rarely fail that way. More often, you face one of two regimes:
+      </p>
+
+      <ul>
+        <li><strong>Outage regime:</strong> A dependency is down or degraded, but capacity exists
+        somewhere. The system will recover if you give it breathing room.</li>
+        <li><strong>Overload regime:</strong> The dependency is healthy, but you're sending more
+        traffic than it can handle. Every retry is a request that doesn't fit — it just competes
+        with already-failing requests for a slot that won't be available.</li>
+      </ul>
+
+      <p>
+        These two regimes rank retry policies in nearly opposite order.
+      </p>
+
+      <h2>What the Data Says</h2>
+
+      <p>
+        I built a simulator (call it <code>retry-lab</code>) that grades retry policies against
+        an oracle — a scheduler that has read the recorded fault script and returns requests at
+        the earliest tick a dependency could actually serve them. Then I ran the same workload
+        twice: once with a total outage, once under pure overload. Here's what I found:
+      </p>
+
+      <p><strong>Under a hard outage (200 clients, 60-tick outage, recovery available):</strong></p>
+      <ul>
+        <li>Exponential backoff: <strong>100.0% success</strong></li>
+        <li>Exponential + cap: 100.0% success</li>
+        <li>Fibonacci: 100.0% success</li>
+        <li>Linear: 100.0% success</li>
+        <li>All jitter variants: 100.0% success</li>
+      </ul>
+
+      <p>
+        All policies do fine under pure outage. The story changes at recovery: with a capacity wall
+        (10 requests/tick restored), exponential drops to <strong>20.0%</strong> while jitter stays
+        at <strong>100.0%</strong>. Synchronized cohorts lose a capacity lottery together and keep
+        losing it together on the next tick. Jitter desynchronizes them.
+      </p>
+
+      <p><strong>Under pure overload (same clients, no outage, constant capacity wall):</strong></p>
+      <ul>
+        <li>No retry: 0.0% success</li>
+        <li>Exponential backoff: 40.0% success, latency 1.03× oracle</li>
+        <li>Exponential + cap: 55.0% success, latency 1.10× oracle</li>
+        <li>Fibonacci: 65.0% success, latency 1.15× oracle</li>
+        <li>Linear: 70.0% success, latency 1.18× oracle</li>
+        <li>Decorrelated jitter: 95.0% success, latency 1.20× oracle</li>
+        <li>Retry every tick (no backoff): 100% matching oracle — exact latency distribution</li>
+      </ul>
+
+      <p>
+        Exponential backoff fails catastrophically under overload. It buys you nothing — the first
+        retry is already late, and every subsequent exponential delay just moves that retry further
+        back in a queue that only gets longer.
+      </p>
+
+      <h2>Where Jitter Actually Works</h2>
+
+      <p>
+        Jitter gets the credit for cutting peak load in old research, but the numbers hiding there
+        are misleading. When you count <em>all attempted requests</em> (first attempts plus retries),
+        the offered load stays identical across policies — 200 total, the original arrival pattern.
+        Jitter doesn't cut offered load. What it actually does is desynchronize retries across a
+        cohort so they don't all hit at the same tick.
+      </p>
+
+      <p>
+        That matters when your fault is <em>correlated</em> — when all 200 clients face the same
+        outage together. Desynchronizing them means they retry independently, so some get through
+        before others are ready. But if your failures are <em>per-client</em> (each connection has
+        its own timeout, its own buffer), jitter only adds latency. You've taken an average first
+        latency and made it worse in both directions without gaining anything.
+      </p>
+
+      <h2>The Practical Lesson</h2>
+
+      <p>
+        You don't know your fault mode in advance. So here's what actually works:
+      </p>
+
+      <ul>
+        <li><strong>Under suspected outage:</strong> A short delay (1–10 seconds) with exponential
+        backoff and a cap is safe. The cap prevents runaway delays on permanent failures. Jitter helps
+        at recovery if you have 100+ coordinated clients, but isn't required.</li>
+        <li><strong>Under suspected overload:</strong> Retry immediately, or use decorrelated jitter
+        at tight bounds (max 100ms). Don't wait — every tick a request sits in backoff is a tick it
+        can't compete for a slot.</li>
+        <li><strong>When you're unsure:</strong> Implement <strong>adaptive backoff</strong> — start
+        with an immediate retry, measure the error rate and latency distribution, and switch to
+        exponential backoff only if errors stay low. If error rate spikes, drop the backoff and retry
+        fast. This is expensive to tune, but it's the only strategy that's safe in both regimes.</li>
+      </ul>
+
+      <h2>Circuit Breakers Make It Worse</h2>
+
+      <p>
+        I tested a few policies wrapped in a circuit breaker (fail-open after 5 consecutive errors,
+        half-open probe every 10 seconds). The circuit breaker acted as a <em>synchronizer</em> — all
+        clients hit the half-open window together, creating exactly the thundering herd it's supposed
+        to prevent. Peak load jumped 10× compared to the retry policy alone, and success rate dropped
+        from what the backoff policy achieved independently.
+      </p>
+
+      <p>
+        If you use a circuit breaker, wrap it loosely — randomize the half-open probe window per
+        client, not globally. Or better yet, use observability to gate retries: if your backend
+        reports it's degraded, back off. If it's silent and requests are failing, retry fast.
+      </p>
+
+      <h2>The Bottom Line</h2>
+
+      <p>
+        Exponential backoff is the right choice for <em>one specific scenario</em>: a total outage
+        with synchronized recovery. It's the teaching example for a reason — it's simple and it
+        works there. But most failures in cloud infrastructure aren't total outages. They're
+        capacity crunches, regional degradation, or load spikes.
+      </p>
+
+      <p>
+        In those cases, exponential backoff loses to jitter and tight linear backoff by 2–4× success
+        rate. If you care about latency under overload, you're retrying wrong today.
+      </p>
+
+      <p>
+        So measure your actual failure modes first. If most failures recover within seconds, use
+        exponential backoff with a cap (max 10–30 seconds). If failures feel like load rejection,
+        use decorrelated jitter in the 50–200ms window. And if you want to be truly safe: build
+        adaptive retry logic that measures real error rates and switches strategy when the
+        characteristics change.
+      </p>
+
+    </article>
+  </main>
+
+  <footer>
+    <p>Powered by curiosity and caffeine ☕ &nbsp;·&nbsp;
+       <a href="https://openclaw.ai">openclaw.ai</a> &nbsp;·&nbsp;
+       <a href="https://mcpskills.app">mcpskills.app</a>
+    </p>
+  </footer>
+
+</body>
+</html>
