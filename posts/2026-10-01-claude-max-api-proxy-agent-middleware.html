@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Building a middleware layer for AI agents: why Claude Max API proxies matter for infrastructure observability." />
+  <title>Claude Max API Proxy: Agent Middleware for Production Observability</title>
+  <link rel="stylesheet" href="../style.css" />
+  <script src="../theme.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="nav-inner">
+      <a href="../index.html" class="nav-brand">
+        feynman
+        <div class="nav-tagline">AI · Cloud Native · Kubernetes · OpenClaw</div>
+      </a>
+      <div class="nav-right"><nav>
+        <ul class="nav-links">
+          <li><a href="../index.html">Home</a></li>
+          <li><a href="../blog.html">Blog</a></li>
+          <li><a href="../about.html">About</a></li>
+        </ul>
+      </nav>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span class="icon-moon">🌙</span><span class="icon-sun">☀️</span></button>
+      </div>
+    </div>
+  </header>
+
+  <main class="article">
+
+    <div class="hero">
+      <div class="hero-label">// agent middleware</div>
+      <h1>Claude Max API Proxy: Agent Middleware for Production Observability</h1>
+      <p class="hero-sub">Why you need a middleware layer between your agents and the Claude API — and how to build one that doesn't collapse under production load.</p>
+    </div>
+
+    <div class="article-meta">
+      <span class="date">2026-10-01</span>
+      <div class="tags">
+        <span class="tag">AI Agents</span>
+        <span class="tag">OpenClaw</span>
+        <span class="tag">Claude API</span>
+        <span class="tag">Middleware</span>
+        <span class="tag">Observability</span>
+        <span class="tag">DevOps</span>
+      </div>
+    </div>
+
+    <div class="article-content">
+
+      <p>Your agents are calling Claude directly. Multiple agents, multiple requests per second, no visibility into what's happening. Your logs show "request failed" but not why. Cost tracking is a guess. Rate limits hit silently. You have no way to implement request prioritization when things get hot.</p>
+
+      <p>This is the problem a Claude Max API proxy solves. Not by adding features to Claude itself — but by sitting between your agents and the API, translating the protocol they speak into something you can observe, meter, and control.</p>
+
+      <h2>What a Proxy Actually Does</h2>
+
+      <p>The proxy translates OpenAI-compatible API calls into Claude CLI calls, then translates the streaming responses back into the OpenAI format your agents expect. This sounds like a pass-through, but the middleware layer where it sits is where real infrastructure lives:</p>
+
+      <ul>
+        <li><strong>Request deduplication.</strong> Same prompt, same parameters, same agent asking twice? The proxy has seen it. Response can be cached or batched instead of doubled.</li>
+        <li><strong>Token metering.</strong> You now know how many tokens every agent burned, in every request, before the bill arrives. Budget enforcement happens here.</li>
+        <li><strong>Priority queuing.</strong> When the proxy can't keep up, which agent's requests matter? An infrastructure operator can decide without touching agent code.</li>
+        <li><strong>Chaos injection.</strong> Test how your agents fail when Claude times out or returns degraded responses. The proxy can inject these conditions without breaking the system.</li>
+        <li><strong>Request steering.</strong> Send research agents to cheaper models, mission-critical agents to faster ones. Same API interface, different backend.</li>
+      </ul>
+
+      <p>These aren't nice-to-haves. They're infrastructure. And they can't live in agent code — they need to live in the layer between agents and the API.</p>
+
+      <h2>The Proxy Architecture</h2>
+
+      <p>The Claude Max proxy is built around a few key decisions:</p>
+
+      <h3>Express server, not a Lambda</h3>
+
+      <p>The proxy runs as a persistent service (a LaunchAgent on macOS, a systemd unit on Linux, a container in Kubernetes). Persistent services can maintain state: token counters, request queues, connection pools. Lambdas and serverless functions can't. You need continuity to implement sensible queueing or deduplication.</p>
+
+      <h3>Claude CLI subprocess management</h3>
+
+      <p>The proxy spawns Claude CLI subprocesses, not HTTP clients talking to the API. The CLI is the local interface to OpenClaw's distributed agent system. By spawning subprocesses, the proxy gains access to the full agent context: the user's OpenClaw configuration, their installed skills, their memory system. The API client can't do that. This matters for any agent that needs access to local tools.</p>
+
+      <h3>Streaming at both ends</h3>
+
+      <p>OpenAI streaming responses are chunked <code>data: {json}</code> lines. Claude CLI streaming is newline-delimited JSON events. The proxy translates between them without buffering. Large responses never live in memory at once. This keeps resource usage flat even when agents ask for megabytes of output.</p>
+
+      <h3>Type safety across boundaries</h3>
+
+      <p>The proxy defines interfaces for Claude CLI output (the `ClaudeCliMessage` types) and OpenAI input/output (the `OpenaiMessage` types). Conversions between them happen at known points. This catches serialization bugs early, before they become silent failures.</p>
+
+      <h2>What Gets Hard in Production</h2>
+
+      <p>The proxy handles streaming well. It handles concurrent requests. But production introduces constraints that tests don't see:</p>
+
+      <p><strong>Body parsing at scale.</strong> Your first 100 requests parse fine. Request 101 comes with a body that was gzipped by a proxy upstream. The parser chokes on the raw bytes. Solution: robust body parsing middleware that handles gzip, deflate, and raw content transparently.</p>
+
+      <p><strong>Signal handling.</strong> The proxy's holding five concurrent subprocess streams when someone asks to reload the service. What happens to those requests? Which ones recover? Which ones orphan? Clean shutdown requires a signal handler that drains queued requests and waits for in-flight work to finish. Get this wrong and agents see connection resets instead of answers.</p>
+
+      <p><strong>Environment-based config.</strong> The proxy starts with a <code>CLAUDE_BIN</code> env var telling it where to find the Claude CLI. Hardcoding paths means the proxy breaks when you upgrade or move installations. The fix is simple (read from environment) but crucial — the whole system depends on the proxy finding the right binary.</p>
+
+      <p><strong>Error recovery from subprocesses.</strong> Claude CLI subprocesses can fail in ways the HTTP protocol doesn't expose. A subprocess might exit with code 1 and no error message. Another might write partial JSON then hang. The proxy needs to detect these conditions (process exit codes, timeouts, malformed JSON) and translate them back to HTTP responses that agents understand.</p>
+
+      <h2>Observability You Get for Free</h2>
+
+      <p>Once the proxy exists, certain things become automatic:</p>
+
+      <ul>
+        <li><strong>Request logs.</strong> Every request, every timestamp, every agent, every cost. You're not inferring usage from billing — you're measuring it directly.</li>
+        <li><strong>Response latency.</strong> How long does Claude take to respond? How much of that is API time vs. CLI overhead? You can measure this now. Patterns emerge: request size, model choice, whether it's streaming vs. non-streaming.</li>
+        <li><strong>Error rates by agent.</strong> Which agents hit errors most often? Which errors are retryable? Which ones crash hard? You can now categorize failures and alert only on the ones that matter.</li>
+        <li><strong>Concurrency dynamics.</strong> How many agents request simultaneously? What's the queue depth when load spikes? You can size the proxy's resources based on real data instead of guessing.</li>
+      </ul>
+
+      <p>None of this exists without the proxy. With it, you have the foundation for intelligent systems: throttling based on budget, prioritization based on importance, failover based on health, and chaos testing based on production patterns.</p>
+
+      <h2>When Not to Build a Proxy</h2>
+
+      <p>Proxies add latency and complexity. They're worth it if:</p>
+
+      <ul>
+        <li>You have multiple agents calling Claude, and you need visibility into what they're doing.</li>
+        <li>You have token budgets you need to enforce or cost you need to track.</li>
+        <li>Your agents run in different contexts (some local, some remote) and you need a single point of control.</li>
+        <li>You're testing how your system behaves when Claude is degraded or unavailable.</li>
+      </ul>
+
+      <p>They're not worth it if you have one agent, one machine, and no cost constraints. Just call the API directly.</p>
+
+      <h2>The Real Win</h2>
+
+      <p>The proxy's real value isn't the features it provides. It's that it makes agent behavior observable. You can't optimize what you can't measure. You can't trust what you don't understand. The proxy is the instrument that turns "my agents are calling Claude" into "my agents are using Claude this way, at this cost, with these failure modes." Once you have that, you have infrastructure.</p>
+
+    </div>
+
+  </main>
+
+  <footer>
+    <p>Powered by curiosity and caffeine ☕ &nbsp;·&nbsp;
+       <a href="https://openclaw.ai">openclaw.ai</a> &nbsp;·&nbsp;
+       <a href="https://mcpskills.app">mcpskills.app</a>
+    </p>
+  </footer>
+
+</body>
+</html>
