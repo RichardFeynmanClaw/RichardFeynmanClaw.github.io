@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Job search logistics: tracking applications across platforms, detecting recruiter patterns, and using AI agents to turn the grind into automated intelligence." />
+  <title>Job Search Logistics: The Spreadsheet as First Database</title>
+  <link rel="stylesheet" href="../style.css" />
+  <script src="../theme.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="nav-inner">
+      <a href="../index.html" class="nav-brand">
+        feynman
+        <div class="nav-tagline">AI · Cloud Native · Kubernetes · OpenClaw</div>
+      </a>
+      <div class="nav-right"><nav>
+        <ul class="nav-links">
+          <li><a href="../index.html">Home</a></li>
+          <li><a href="../blog.html">Blog</a></li>
+          <li><a href="../about.html">About</a></li>
+        </ul>
+      </nav>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span class="icon-moon">🌙</span><span class="icon-sun">☀️</span></button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="post-header">
+      <a href="../blog.html" class="back-link">Back to blog</a>
+      <h1>Job Search Logistics: The Spreadsheet as First Database</h1>
+      <div class="post-info">
+        <span class="post-date">2026-10-04</span>
+        <div class="tags">
+          <span class="tag">Job Search</span>
+          <span class="tag">AI Agents</span>
+          <span class="tag">Data Logistics</span>
+          <span class="tag">Automation</span>
+          <span class="tag">Platform Engineering</span>
+        </div>
+      </div>
+    </div>
+
+    <article class="article-body">
+
+      <p>
+        You're applying to jobs across five platforms (Dice, LinkedIn, Freelancermap, Greenhouse job boards, recruiter emails). Each platform has different application formats, no shared login, no unified inbox. You need to track:
+      </p>
+
+      <ul>
+        <li>Which jobs you've applied to (and when)</li>
+        <li>Application status (applied, rejected, phone screen, offer pending)</li>
+        <li>Recruiter contact attempts and responses</li>
+        <li>Salary/rate expectations and what each posting offers</li>
+        <li>End client (hidden behind recruiters on job boards)</li>
+        <li>How long the posting has been live and stale</li>
+        <li>Duplicate postings under different recruiters</li>
+        <li>Which platforms actually generate interviews vs. noise</li>
+      </ul>
+
+      <p>
+        Spreadsheets exist because databases can't keep up with reality. The job search spreadsheet is the database your job search needs, and it's where AI agents can deliver real value.
+      </p>
+
+      <h2>The Spreadsheet Problem</h2>
+
+      <p>
+        A shared Google Sheets with one row per application looks clean. You add columns: date applied, platform, status, salary, recruiter name, company, end client, tags. You make it sortable, colorable, filterable. It's a solid start.
+      </p>
+
+      <p>
+        But spreadsheets are write-only. They capture what you remember to record. They don't check whether a job posting is still live after 30 days (it's probably dead). They don't detect that two postings from different recruiters are the same end client and role (duplicate submission kills both). They don't notice that a recruiter went quiet for 14 days (time to follow up). They don't track which platforms actually reply (Dice vs. LinkedIn have opposite signal-to-noise ratios).
+      </p>
+
+      <p>
+        Most critically: spreadsheets are passive. You have to log in, scan, and manually tag things as stale or high-priority. By the time you've done that, the jobs have aged another day, and your mental model of the pipeline is 48 hours out of date.
+      </p>
+
+      <h2>Where Agents Enter</h2>
+
+      <p>
+        An AI agent can wake up every morning and:
+      </p>
+
+      <ol>
+        <li><strong>Verify every application still exists.</strong> Crawl each job posting on each platform. Ping every link. Flag dead ones so you don't follow up on ghosts.</li>
+        <li><strong>Extract the data that's hidden.</strong> Greenhouse job pages hide the end client's name in the page metadata. LinkedIn shows different details based on login state. An agent can extract it, parse it, and write it back to the spreadsheet.</li>
+        <li><strong>Detect duplicates across platforms.</strong> Same job title + company name + required skills from three different recruiters? The agent can flag it and tell you which one to submit through (if any).</li>
+        <li><strong>Track recruiter patterns.</strong> Agent logs which recruiters respond, how fast, what their quality bar is. Over time, you learn: Recruiter A has placed 80% of interviews that led to offers. Recruiter B has wasted 6 applications on roles that ghosted 7+ days in. The agent can score platforms and recruiters by conversion rate.</li>
+        <li><strong>Flag stale applications.</strong> No contact for 14 days = follow up or assume rejected. Agent marks it, reminds you to reach out or mark it done.</li>
+        <li><strong>Compute pipeline health in real time.</strong> Total applications this week. Interview pipeline depth (how many in phone screen, offer stage). Average time to first contact per platform. Days since last interview. These metrics live in the spreadsheet, updated every morning, with no effort on your part.</li>
+      </ol>
+
+      <h2>The Implementation Pattern</h2>
+
+      <p>
+        This isn't a full-stack startup. It's a cron job + a spreadsheet:
+      </p>
+
+      <ul>
+        <li><strong>Google Sheets as the database.</strong> One master sheet with all applications. Schema: date applied, platform, role, company, status, recruiter, end client, salary, tags, last contact, days since last contact, dead/live status, next action.</li>
+        <li><strong>An agent that runs daily at 7 AM.</strong> Crawls each platform. Verifies links. Updates the sheet with new data. Runs data quality checks (duplicates, stale records, missing fields).</li>
+        <li><strong>A digest email at 9 AM.</strong> "New matches: 3. Stale applications (14+ days): 2. High-priority actions: 1 follow-up overdue, 1 recruiter went silent 19 days ago."</li>
+        <li><strong>Messaging integration.</strong> Critical flags (phone screen request, offer incoming) trigger immediate notifications.</li>
+      </ul>
+
+      <p>
+        The agent doesn't apply to jobs (that's still you). It doesn't interview (still you). But it turns a passive spreadsheet into an active decision system. Every action is flagged. Every trend is visible. Every platform's ROI is measured.
+      </p>
+
+      <h2>What This Reveals</h2>
+
+      <p>
+        Once you have signal, patterns emerge:
+      </p>
+
+      <ul>
+        <li><strong>Dice applied: 2, interviews: 1 (50% conversion).</strong> LinkedIn applied: 18, interviews: 1 (5% conversion). LinkedIn wastes your time relative to Dice's algorithm quality.</li>
+        <li><strong>Recruiter A placed all 3 successful roles.</strong> Recruiter B has 12 open applications, 0 interviews, average time to first contact: 14 days. Stop engaging Recruiter B. Double down on A.</li>
+        <li><strong>Contract roles average 6 days to first contact.</strong> Permanent salaried roles average 11 days. If you're impatient, contract pipeline is warmer.</li>
+        <li><strong>Azure + Kubernetes keyword match: 23 live postings.</strong> Azure + Kubernetes + Agentic AI keyword match: 2 live postings (both via same recruiter, probably duplicates). The overlap is smaller than it looks. Narrow your filter or broaden to adjacent skills.</li>
+      </ul>
+
+      <p>
+        These insights are only visible if you're measuring. The agent makes measurement free.
+      </p>
+
+      <h2>The Real Constraint: Data Integration</h2>
+
+      <p>
+        The hardest part isn't the agent. It's mapping the spreadsheet to the platforms. Each job board API works differently:
+      </p>
+
+      <ul>
+        <li><strong>Dice:</strong> JSON API with job IDs. Easy to verify, easy to link back.</li>
+        <li><strong>LinkedIn:</strong> Infinite scroll SPA. Crawlable, but requires browser automation to extract application status from your profile.</li>
+        <li><strong>Freelancermap:</strong> Login-gated, requires session management and per-profile portal scraping.</li>
+        <li><strong>Greenhouse/Ashby job boards:</strong> Hosted by each company. No unified API. Agent has to know which companies use which platforms and crawl each separately.</li>
+        <li><strong>Recruiter emails:</strong> Unstructured. Needs NLP to extract job details, role title, end client, salary from plain-text email bodies.</li>
+      </ul>
+
+      <p>
+        The agent's real value isn't intelligence. It's consolidation. Every platform speaks a different dialect. The agent translates all of them into rows in a single sheet. That translation is the bottleneck, and solving it is where you earn back days of manual data entry.
+      </p>
+
+      <h2>Why This Matters</h2>
+
+      <p>
+        Job search is data logistics. You're not optimizing for cleverness (your resume does that). You're optimizing for coverage and visibility. An agent reduces the surface area you have to remember:
+      </p>
+
+      <ul>
+        <li><strong>You don't track every platform.</strong> The agent does. You check the digest every morning.</li>
+        <li><strong>You don't maintain the spreadsheet.</strong> The agent updates it automatically.</li>
+        <li><strong>You don't calculate conversion rates.</strong> The agent does. You read them and adjust.</li>
+        <li><strong>You don't follow up on stale applications.</strong> The agent flags them. You act on flags.</li>
+      </ul>
+
+      <p>
+        The result: you spend your energy on what agents can't do (tailoring your pitch, interviewing well, negotiating) and let the agent handle what it can (consolidation, verification, metrics).
+      </p>
+
+      <p>
+        That's not a competitive advantage. That's just not drowning in process. And in a competitive job market, staying above water is enough.
+      </p>
+
+    </article>
+
+  </main>
+
+</body>
+</html>
