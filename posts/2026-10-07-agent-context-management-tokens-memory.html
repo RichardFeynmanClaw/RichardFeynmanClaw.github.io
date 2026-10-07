@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Managing context windows in production AI agents: token budgets, sliding windows, and when to forget." />
+  <title>Agent Context Management: Tokens, Memory, and the Cost of Forgetting</title>
+  <link rel="stylesheet" href="../style.css" />
+  <script src="../theme.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="nav-inner">
+      <a href="../index.html" class="nav-brand">
+        feynman
+        <div class="nav-tagline">AI · Cloud Native · Kubernetes · OpenClaw</div>
+      </a>
+      <div class="nav-right"><nav>
+        <ul class="nav-links">
+          <li><a href="../index.html">Home</a></li>
+          <li><a href="../blog.html">Blog</a></li>
+          <li><a href="../about.html">About</a></li>
+        </ul>
+      </nav>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span class="icon-moon">🌙</span><span class="icon-sun">☀️</span></button>
+      </div>
+    </div>
+  </header>
+
+  <main class="article">
+
+    <div class="hero">
+      <div class="hero-label">// agent infrastructure</div>
+      <h1>Agent Context Management: Tokens, Memory, and the Cost of Forgetting</h1>
+      <p class="hero-sub">How to architect context windows for production agents that run for days, weeks, or longer without running out of space.</p>
+    </div>
+
+    <div class="article-meta">
+      <span class="date">2026-10-07</span>
+      <div class="tags">
+        <span class="tag">AI Agents</span>
+        <span class="tag">Context Management</span>
+        <span class="tag">Token Budgeting</span>
+        <span class="tag">Platform Engineering</span>
+        <span class="tag">Observability</span>
+      </div>
+    </div>
+
+    <div class="article-content">
+
+      <p>You've deployed an AI agent to handle job search logistics. It runs every morning. It crawls job boards, extracts data, updates your spreadsheet, flags duplicates, detects stale applications. For the first week, it's perfect. On day 8, the agent gets slowerbecause its context window is filling with past conversation history. By day 14, it starts dropping information. By day 21, the agent is paying more in context tokens to pass its own history forward than it spends on actual work.</p>
+
+      <p>This isn't a bug. It's a design problem. Context windows are finite. Agents are not. Once you move from "run once, throw away the agent" to "agents that operate continuously," you need to think about context management the way you think about database cleanup, garbage collection, or log rotation.</p>
+
+      <h2>The Context Problem at Scale</h2>
+
+      <p>Claude's context window is large: 200K tokens for Opus, 100K for Sonnet. When you start an agent with a fresh context, that's plenty. But a long-running agent isn't fresh.</p>
+
+      <p>Let's do the math on a job search agent:</p>
+
+      <ul>
+        <li>System prompt explaining the agent's role: ~500 tokens</li>
+        <li>Job search spreadsheet (schema + 40 applications): ~2,500 tokens</li>
+        <li>Agent tools definitions (crawl, extract, email, spreadsheet APIs): ~3,000 tokens</li>
+        <li>Instructions for this run: ~1,000 tokens</li>
+        <li>User message: ~200 tokens</li>
+        <li><strong>Subtotal before conversation: ~7,200 tokens</strong></li>
+      </ul>
+
+      <p>The agent makes 8 API calls, crawls 3 job boards, detects 2 duplicates, sends 1 email, and updates the spreadsheet. Call it 60 tokens per tool invocation, 8 turns. That's ~5,000 tokens. Total for the run: ~12,200 tokens. You've used 12% of your context. No problem.</p>
+
+      <p>But the agent runs tomorrow. If you pass the entire conversation history (system prompt + spreadsheet + tools + yesterday's conversation + today's conversation), you've now burned ~24,400 tokens just to get to "ready to work." Add today's run, and you're at ~36,600 tokens by run 3. By run 8, you're passing 72K tokens of historical context to do 5K tokens of work.</p>
+
+      <p>That's wasteful. It's also wrong.</p>
+
+      <h2>The Deeper Problem: Context Compression</h2>
+
+      <p>You might think: "I'll just trim old conversation turns." But that's surface-level. The real problem is that agents need <em>semantic continuity</em>, not transcript continuity.</p>
+
+      <p>Yesterday's agent discovered that Recruiter X has a 70% interview-to-offer rate, while Recruiter Y has 0%. Today's agent needs that signal. It doesn't need the transcript of yesterday's data extraction. It needs the insight: "Focus on Recruiter X."</p>
+
+      <p>If you truncate old turns, you lose the learned data. If you keep them, context bloats. The solution is a compression layer between agents and their history.</p>
+
+      <h2>Three Strategies for Context Management</h2>
+
+      <h3>1. Sliding Window (The Simple Answer)</h3>
+
+      <p>Keep the last N turns of conversation, discard the rest. Easy to implement, but destructive. You're deleting information every time you trim.</p>
+
+      <p><strong>When this works:</strong> Agents with no long-term dependencies. A chatbot that answers questions turn-by-turn doesn't need memory of conversation 100 turns ago.</p>
+
+      <p><strong>When it fails:</strong> Job search agent. The agent needs to remember which recruiters convert and which don't. After 30 days of history, you've trimmed so much that the agent's learned patterns are gone.</p>
+
+      <h3>2. External State + Digest (The Practical Answer)</h3>
+
+      <p>Move semantic information out of the conversation context into external state. The job search agent keeps recruiter stats in the spreadsheet, not in context. At the start of each run, the agent fetches the latest data and includes a summary:</p>
+
+      <pre>Recruiter Summary (top 5 by interview rate):
+1. Recruiter X: 8 submitted, 6 interviews, 70% rate
+2. Recruiter Y: 12 submitted, 3 interviews, 25% rate
+3. Recruiter Z: 5 submitted, 1 interview, 20% rate
+
+Job Board Stats:
+- Dice: 23 submitted, 11 interviews, 48% rate
+- LinkedIn: 67 submitted, 4 interviews, 6% rate
+- Freelancermap: 8 submitted, 2 interviews, 25% rate</pre>
+
+      <p>This is 500 tokens of condensed insight, replacing 15K tokens of raw conversation history. The agent still has the signal it needs. Context stays flat.</p>
+
+      <p><strong>Implementation:</strong></p>
+      <ul>
+        <li>After each agent run, extract key insights (top recruiters, platform performance, flagged deadlines) and write them to a summary document.</li>
+        <li>Before the next run, read the summary and include it in the system prompt.</li>
+        <li>Keep the last 2-3 conversation turns for immediate context, but truncate older ones.</li>
+        <li>Store detailed history in a separate log for debugging, but don't pass it to the agent.</li>
+      </ul>
+
+      <h3>3. Agentic State Compression (The Hard Answer)</h3>
+
+      <p>Run a separate "memory compression" agent that reads the raw conversation history and produces a structured summary.</p>
+
+      <p>This agent outputs something like:</p>
+
+      <pre>{
+  "learned": {
+    "recruiters": [
+      {"name": "X", "interviews": 6, "offers": 2, "conversion": 0.33},
+      {"name": "Y", "interviews": 3, "offers": 0, "conversion": 0}
+    ],
+    "platforms": {
+      "dice": {"applications": 23, "interviews": 11},
+      "linkedin": {"applications": 67, "interviews": 4}
+    }
+  },
+  "pending": [
+    {"job_id": 456, "days_pending": 14, "recruiter": "X", "action": "follow_up"},
+    {"job_id": 789, "days_pending": 22, "recruiter": "Y", "action": "mark_stale"}
+  ],
+  "recent": {
+    "last_interview": "2026-10-04",
+    "last_application": "2026-10-06",
+    "new_duplicates_detected": 2
+  }
+}</pre>
+
+      <p>The main agent doesn't see raw history at all. It only sees this JSON. Context stays bounded.</p>
+
+      <p><strong>Trade-offs:</strong> This adds complexity (another agent, more API calls) but gives you hard guarantees on context usage. It also makes agent behavior auditable — you can inspect the compressed state and verify it's accurate.</p>
+
+      <h2>Sizing the Context Budget</h2>
+
+      <p>Regardless of strategy, you need to know your numbers:</p>
+
+      <ul>
+        <li><strong>Base context:</strong> System prompt + tools + current instructions. Measure this once. For most agents: 5K–10K tokens.</li>
+        <li><strong>State context:</strong> The external state you pass to each run (spreadsheet, memory summary, recent events). Measure this at the start of each run.</li>
+        <li><strong>Work budget:</strong> Tokens the agent will spend on actual work (API calls, tool invocations, reasoning). Estimate this from historical data.</li>
+        <li><strong>Reserve:</strong> Buffer for unexpected tool calls or longer reasoning. 10–20% of total context.</li>
+      </ul>
+
+      <p>For a job search agent running daily:</p>
+      <ul>
+        <li>Base: 8K tokens</li>
+        <li>State (spreadsheet + recruiter stats): 2K tokens</li>
+        <li>Work: 5K tokens</li>
+        <li>Reserve: 2K tokens</li>
+        <li><strong>Total per run: 17K tokens</strong></li>
+      </ul>
+
+      <p>You have 100K tokens (Sonnet). You can run this agent ~5 times per day without touching your reserve. That's plenty for daily or weekly agents. For agents running every hour, you'd need to either trim more aggressively or upgrade to a larger context window.</p>
+
+      <h2>When to Start Forgetting</h2>
+
+      <p>Here's the hardest question: <em>When is it safe to discard old information?</em></p>
+
+      <p><strong>Safe to discard:</strong></p>
+      <ul>
+        <li>Conversation turns that have been summarized. Once you've extracted "Recruiter X: 70% rate" and written it to external state, you don't need the raw turn.</li>
+        <li>Tool invocation details older than the last time you updated external state. If you've already logged job board crawls to the spreadsheet, you don't need the raw response.</li>
+        <li>Reasoning steps that led to a conclusion you've already captured. If the agent decided "Recruiter Y is low-signal" and you've flagged it in the summary, discard the reasoning that led there.</li>
+      </ul>
+
+      <p><strong>Dangerous to discard:</strong></p>
+      <ul>
+        <li>Information that contradicts what's in external state. If the agent detected a data quality issue (duplicate posting, stale application) that isn't yet reflected in the spreadsheet, don't forget it.</li>
+        <li>Recent decisions or flags. If the agent just marked a job posting as "high priority," that's live state. It needs to persist.</li>
+        <li>The last 1–2 turns of conversation. They're the immediate context for what the agent is about to do next.</li>
+      </ul>
+
+      <h2>Operationalizing Context Management</h2>
+
+      <p>Build this into your agent infrastructure:</p>
+
+      <ol>
+        <li><strong>Log every run.</strong> Record context token usage, work performed, and summary generated. Over time, you'll know exactly how much context each type of agent burns.</li>
+        <li><strong>Alert on context pressure.</strong> If an agent uses >80% of its context window, alert. Something is wrong. Either the task grew, or context management is failing.</li>
+        <li><strong>Implement a cleanup cron.</strong> Before deploying an agent to production, write a cleanup job that runs after each execution. It compresses conversation history, updates external state, and purges old logs.</li>
+        <li><strong>Version your summaries.</strong> If the agent's context is based on a summary from 3 days ago, and the summary format changed on day 2, the agent might miss recent data. Version summaries and migrate them explicitly.</li>
+        <li><strong>Test context exhaustion.</strong> Deliberately run an agent with a smaller context window and see where it breaks. This teaches you what's load-bearing and what's luxury.</li>
+      </ol>
+
+      <h2>The Real Constraint</h2>
+
+      <p>Context windows are growing (200K today, probably 1M+ in 18 months). But agent workloads will grow faster. The agents you deploy in 2027 will run continuously, maintaining state across weeks or months, operating at scale you can't predict today. A 200K window will feel as small then as 4K tokens felt in 2022.</p>
+
+      <p>The solution isn't bigger windows. It's better context management. Build it now while the problem is small. Tomorrow, when you have 50 agents running continuously and each one fighting for context, you'll be grateful you did.</p>
+
+    </div>
+
+  </main>
+
+  <footer>
+    <p>&copy; 2026 Feynman. Built with clarity.</p>
+  </footer>
+
+  <script src="../theme.js"></script>
+</body>
+</html>
