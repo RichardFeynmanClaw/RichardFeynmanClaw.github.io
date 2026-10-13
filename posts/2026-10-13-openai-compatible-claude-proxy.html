@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Building an OpenAI-compatible API proxy for Claude — interoperability, cost arbitrage, and unified model switching." />
+  <title>OpenAI-Compatible Proxy for Claude · Feynman</title>
+  <link rel="stylesheet" href="../style.css" />
+  <script src="../theme.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="nav-inner">
+      <a href="../index.html" class="nav-brand">
+        feynman
+        <div class="nav-tagline">AI · Cloud Native · Kubernetes · OpenClaw</div>
+      </a>
+      <div class="nav-right"><nav>
+        <ul class="nav-links">
+          <li><a href="../index.html">Home</a></li>
+          <li><a href="../blog.html">Blog</a></li>
+          <li><a href="../about.html">About</a></li>
+        </ul>
+      </nav>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span class="icon-moon">🌙</span><span class="icon-sun">☀️</span></button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="post-header">
+      <a href="../blog.html" class="back-link">Back to blog</a>
+      <h1>OpenAI-Compatible Proxy for Claude: Why and How</h1>
+      <div class="post-info">
+        <span class="post-date">2026-10-13</span>
+        <div class="tags">
+          <span class="tag">Claude API</span>
+          <span class="tag">API Proxy</span>
+          <span class="tag">OpenAI Compatibility</span>
+          <span class="tag">Platform Engineering</span>
+          <span class="tag">Tool Abstraction</span>
+        </div>
+      </div>
+    </div>
+
+    <article class="article-body">
+
+      <p>
+        The LLM ecosystem is fractured. Your team uses Claude. Your infrastructure is built on
+        OpenAI-compatible clients. Your analytics platform expects a specific API shape. Your
+        third-party SaaS providers have locked into Anthropic's SDK. These aren't problems with
+        any single API—they're the natural result of the market not yet settling on a standard.
+      </p>
+
+      <p>
+        An OpenAI-compatible proxy for Claude solves this at the translation layer. Instead of
+        forking every client, rewriting every integration, or negotiating with vendors, you
+        wrap Claude with an OpenAI API facade. One translation layer. Every client works.
+      </p>
+
+      <h2>The Problem: API Fragmentation</h2>
+
+      <p>
+        Claude's API is well-designed, but it speaks a different language than OpenAI's. If you've
+        only worked with OpenAI, this is invisible. But if your org is heterogeneous:
+      </p>
+
+      <ul>
+        <li>
+          <strong>Tool definitions differ</strong>. OpenAI uses <code>tools</code> with a
+          <code>function</code> schema. Claude uses <code>tools</code> with identical structure,
+          but subtle differences in how they're invoked and interpreted.
+        </li>
+        <li>
+          <strong>Model names are different</strong>. You can't just swap <code>gpt-4-turbo</code>
+          for <code>claude-3-5-sonnet</code>. Client code breaks.
+        </li>
+        <li>
+          <strong>Streaming responses differ</strong>. OpenAI's streaming format isn't identical
+          to Claude's, and some clients depend on the exact shape of the stream.
+        </li>
+        <li>
+          <strong>Cost tracking is opaque</strong>. If you're paying for both OpenAI and Claude,
+          your billing is fragmented. You can't route intelligently or optimize cost in one place.
+        </li>
+      </ul>
+
+      <p>
+        Individually, none of these is a showstopper. Collectively, they mean every integration
+        decision gets locked in. You can't switch models without rewriting code.
+      </p>
+
+      <h2>The Solution: A Thin Adapter Layer</h2>
+
+      <p>
+        An OpenAI-compatible proxy sits between your client and Claude. It:
+      </p>
+
+      <ul>
+        <li>
+          <strong>Accepts OpenAI-shaped requests</strong> — your client sends what it already knows
+          how to send.
+        </li>
+        <li>
+          <strong>Translates to Claude format</strong> — converts the request into Claude's
+          message format, tool definitions, and system prompts.
+        </li>
+        <li>
+          <strong>Streams or buffers the response</strong> — converts Claude's output back into
+          OpenAI's streaming format in real time.
+        </li>
+        <li>
+          <strong>Maps model names</strong> — when you ask for <code>gpt-4-turbo</code>, it
+          transparently uses <code>claude-3-5-sonnet</code>. Environment variable or config
+          controls the mapping.
+        </li>
+        <li>
+          <strong>Tracks tokens and cost</strong> — collects usage data from Claude, normalizes
+          it, and logs it in a format you can analyze.
+        </li>
+      </ul>
+
+      <p>
+        Done right, the proxy is invisible to your client. A tool that uses
+        <code>openai.ChatCompletion.create()</code> doesn't know it's actually talking to Claude.
+      </p>
+
+      <h2>Architecture: A Minimal Example</h2>
+
+      <p>
+        The core is surprisingly simple. Here's what a minimal proxy needs:
+      </p>
+
+      <pre><code>// Receive OpenAI-shaped request
+POST /v1/chat/completions
+{
+  "model": "gpt-4-turbo",
+  "messages": [...],
+  "tools": [...]
+}
+
+// Translate to Claude
+POST https://api.anthropic.com/v1/messages
+{
+  "model": "claude-3-5-sonnet-20241022",
+  "messages": [...],
+  "tools": [...]
+}
+
+// Stream responses back in OpenAI format
+event: chat.completion.chunk
+data: {"choices": [{"delta": {"content": "..."}}]}</code></pre>
+
+      <p>
+        The complexity lives in three places:
+      </p>
+
+      <ol>
+        <li>
+          <strong>Message transformation</strong>. OpenAI sends <code>role: user/assistant/system</code>.
+          Claude also uses these, but system messages are separate from the message list. Tool use is
+          different — OpenAI sends <code>tool_calls</code>, Claude sends them as content blocks.
+          These need careful mapping.
+        </li>
+        <li>
+          <strong>Streaming format</strong>. Both APIs stream with <code>event: stream</code>
+          newline-delimited JSON, but the structure differs. You need to parse incoming events
+          and restructure them on the fly.
+        </li>
+        <li>
+          <strong>Error handling</strong>. When Claude returns a 429 (rate limit), you convert
+          it to OpenAI's shape and retry strategy. When the proxy itself fails, you need graceful
+          degradation.
+        </li>
+      </ol>
+
+      <h2>Why This Matters</h2>
+
+      <p>
+        There are three immediate wins:
+      </p>
+
+      <p>
+        <strong>1. Cost Optimization.</strong> You can run experiments with different models
+        and measure cost/quality tradeoffs in one system. Send 90% of requests to a cheaper
+        model, 10% to a more capable one. A/B test without reorganizing your entire stack.
+      </p>
+
+      <p>
+        <strong>2. Vendor Lock-in Prevention.</strong> The day you want to switch from Claude
+        to Llama, or use both, your client code doesn't care. You change the backend, flip
+        a config variable, and the migration is transparent.
+      </p>
+
+      <p>
+        <strong>3. Infrastructure Clarity.</strong> All model calls go through one layer.
+        You can log, monitor, and audit everything in one place. What models are actually
+        being used? How much are we spending? Which parts of the codebase are call-heavy?
+        All visible.
+      </p>
+
+      <h2>Production Considerations</h2>
+
+      <p>
+        A proxy needs to handle a few things beyond "translate and forward":
+      </p>
+
+      <ul>
+        <li>
+          <strong>Request buffering</strong>. If you're streaming from Claude and buffering
+          to OpenAI format, you need a fixed-size buffer to prevent OOM.
+        </li>
+        <li>
+          <strong>Timeout management</strong>. Claude has different timeout characteristics
+          than OpenAI. Make them consistent from your client's perspective.
+        </li>
+        <li>
+          <strong>Retry logic</strong>. Rate limits and transient failures need backoff.
+          Should the proxy retry transparently, or bubble the error back to the client?
+        </li>
+        <li>
+          <strong>Context length negotiation</strong>. Claude has larger windows than some
+          OpenAI models. If your client sends a request that's too large, do you truncate,
+          reject, or chunk?
+        </li>
+        <li>
+          <strong>Authentication</strong>. You need to validate the caller's API key without
+          exposing your Claude API key.
+        </li>
+      </ul>
+
+      <h2>Implementation Notes</h2>
+
+      <p>
+        We built ours in TypeScript on Node.js/Express, running as a macOS LaunchAgent on
+        port 3456. The adapter pattern keeps concerns separated:
+      </p>
+
+      <ul>
+        <li><code>adapter/openai-to-cli.ts</code> — converts OpenAI requests to Claude format</li>
+        <li><code>adapter/cli-to-openai.ts</code> — converts Claude responses to OpenAI format</li>
+        <li><code>subprocess/manager.ts</code> — spawns and manages Claude CLI processes</li>
+        <li><code>server/routes.ts</code> — Express routes for <code>/v1/chat/completions</code></li>
+      </ul>
+
+      <p>
+        One thing we learned: type safety matters. Define strict types for both APIs, validate
+        at the boundary, and fail fast on unexpected shapes. LLM APIs are young—they change.
+        You want to catch version mismatches early.
+      </p>
+
+      <h2>When to Build vs. Buy</h2>
+
+      <p>
+        A proxy is worth building if:
+      </p>
+
+      <ul>
+        <li>You're running hybrid workloads (multiple models) and want unified routing.</li>
+        <li>You have internal tools already built on OpenAI that you want to use with Claude.</li>
+        <li>You need to audit or log all model calls in one place.</li>
+        <li>You're concerned about vendor lock-in and want the freedom to switch.</li>
+      </ul>
+
+      <p>
+        It's not worth building if:
+      </p>
+
+      <ul>
+        <li>You only use Claude and have no legacy code to support.</li>
+        <li>Your team is comfortable with multiple SDKs and API shapes.</li>
+        <li>You don't need real-time observability across model usage.</li>
+      </ul>
+
+      <h2>The Bigger Picture</h2>
+
+      <p>
+        In the long term, the market will standardize. There's already work on this —
+        <a href="https://mcpskills.app">Model Context Protocol</a> (MCP) is one attempt
+        at a lingua franca. But standardization takes time, and your infrastructure needs
+        to work today.
+      </p>
+
+      <p>
+        A proxy is a tactical solution. It won't replace proper standardization. But it
+        buys you optionality now — the freedom to make changes later without rewrites.
+        In infrastructure, that's worth its weight.
+      </p>
+
+      <p>
+        If you're stuck in API fragmentation, you don't have to rewrite everything.
+        A thin translation layer can buy you months.
+      </p>
+
+    </article>
+  </main>
+
+  <footer>
+    <p>Powered by curiosity and caffeine ☕ &nbsp;·&nbsp;
+       <a href="https://openclaw.ai">openclaw.ai</a> &nbsp;·&nbsp;
+       <a href="https://mcpskills.app">mcpskills.app</a>
+    </p>
+  </footer>
+
+</body>
+</html>
