@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Claude Code CLI is not just a tool. When wrapped, instrumented, and networked, it becomes a platform for building reliable AI systems that scale beyond single-model limitations." />
+  <title>Claude Code CLI as an AI Platform: When Your Tool Becomes Infrastructure · Feynman</title>
+  <link rel="stylesheet" href="../style.css" />
+  <script src="../theme.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="nav-inner">
+      <a href="../index.html" class="nav-brand">
+        feynman
+        <div class="nav-tagline">AI · Cloud Native · Kubernetes · OpenClaw</div>
+      </a>
+      <div class="nav-right"><nav>
+        <ul class="nav-links">
+          <li><a href="../index.html">Home</a></li>
+          <li><a href="../blog.html">Blog</a></li>
+          <li><a href="../about.html">About</a></li>
+        </ul>
+      </nav>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span class="icon-moon">🌙</span><span class="icon-sun">☀️</span></button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="post-header">
+      <a href="../blog.html" class="back-link">Back to blog</a>
+      <h1>Claude Code CLI as an AI Platform: When Your Tool Becomes Infrastructure</h1>
+      <div class="post-info">
+        <span class="post-date">2026-10-16</span>
+        <div class="tags">
+          <span class="tag">Claude Code CLI</span>
+          <span class="tag">API Design</span>
+          <span class="tag">Platform Engineering</span>
+          <span class="tag">AI Infrastructure</span>
+          <span class="tag">DevOps</span>
+        </div>
+      </div>
+    </div>
+
+    <article class="article-body">
+
+      <p>
+        Claude Code CLI started as a tool: a way to run Claude against files and code in your terminal. But somewhere between the first release and now, something changed. Teams started wrapping it. Instrumenting it. Networking it. Turning it into infrastructure.
+      </p>
+
+      <p>
+        That's the moment a tool becomes a platform.
+      </p>
+
+      <h2>The Problem It Solves (And Creates)</h2>
+
+      <p>
+        You want Claude to help with your code. But Claude works over HTTP APIs, and those APIs have limitations:
+      </p>
+
+      <ul>
+        <li><strong>Model switching costs are high:</strong> Your app is built on Claude Opus. Anthropic releases Claude Sonnet with the same token count for a tenth of the cost. To switch, you rewrite every client, every prompt, every integration test.</li>
+        <li><strong>Token budgets are per-request:</strong> You can't share context across requests. Every tool invocation, every code review, every agent loop starts fresh. The model can't remember what it saw five minutes ago.</li>
+        <li><strong>Streaming is unidirectional:</strong> You send a prompt, the API streams back tokens. But a coding agent needs bidirectional communication—the model suggests a test, you run it, the model sees the result. Streaming covers the model's output; everything else is request-reply.</li>
+        <li><strong>Error handling is your problem:</strong> Rate limits, connection drops, malformed requests—you handle all of it. The API is stateless by design.</li>
+      </ul>
+
+      <p>
+        Now consider the Claude Code CLI. It's a persistent process on your machine. It loads the model once. It can spawn subprocesses, collect results, show you streaming output, and wait for your input. It's stateful. It's conversational. It's designed for human-in-the-loop workflows where the model is thinking, the user is watching, and context flows both directions.
+      </p>
+
+      <p>
+        What if you could use that same interface programmatically?
+      </p>
+
+      <h2>The Translation Layer</h2>
+
+      <p>
+        This is where the OpenAI-compatible proxy comes in. It's a thin layer between the Claude Code CLI and any client that speaks OpenAI's API.
+      </p>
+
+      <p>
+        Here's the architecture:
+      </p>
+
+      <pre>┌─────────────────────────────────────────────────────────────────┐
+│ Clients: LangChain, OpenAI SDKs, curl, third-party services    │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                ┌────────────▼────────────┐
+                │  OpenAI-Compatible API  │
+                │       (Port 3456)       │
+                └────────────┬────────────┘
+                             │
+        ┌────────────────────┼────────────────────┐
+        │                    │                    │
+   ┌────▼────┐          ┌────▼────┐         ┌────▼────┐
+   │ Claude  │          │ Claude  │         │ Claude  │
+   │  Code   │          │  Code   │         │  Code   │
+   │  (Opus) │          │ (Sonnet)│         │ (Haiku) │
+   └─────────┘          └─────────┘         └─────────┘
+        │                    │                    │
+        └────────────────────┼────────────────────┘
+                             │
+                ┌────────────▼────────────┐
+                │  Claude Code CLI        │
+                │  (subprocess manager)   │
+                └────────────────────────┘</pre>
+
+      <p>
+        The proxy converts OpenAI API calls into CLI invocations, collects the output, and streams it back. It handles:
+      </p>
+
+      <ul>
+        <li><strong>Model routing:</strong> Client requests Sonnet? Spawn the Sonnet process. Requests Opus? Spawn Opus. Switch models without restarting the server.</li>
+        <li><strong>Stateful context:</strong> Each CLI session maintains conversation history. You can run multiple back-and-forth exchanges without losing context.</li>
+        <li><strong>Streaming:</strong> The API streams tokens back to the client as the CLI outputs them. Low latency. Visible progress.</li>
+        <li><strong>Error propagation:</strong> Rate limits, invalid prompts, crashed processes—all surface cleanly to the client.</li>
+        <li><strong>Cost visibility:</strong> Every call logs tokens consumed. You can measure real cost per request, per model, per customer.</li>
+      </ul>
+
+      <h2>When This Becomes Critical</h2>
+
+      <p>
+        The proxy is nice-to-have until you need:
+      </p>
+
+      <p>
+        <strong>Multi-model evaluation:</strong> You're building an AI feature and need to benchmark Opus, Sonnet, and Haiku on the same task. With the proxy, you write your test once and run it against three models by changing a header. Without it, you maintain three separate clients and three sets of integration tests.
+      </p>
+
+      <p>
+        <strong>Cost-aware routing:</strong> You want to route cheap tasks (classification, summarization) to Haiku, and expensive tasks (complex analysis, code generation) to Opus. The proxy lets you write a routing layer in between the client and the CLI—no client changes needed.
+      </p>
+
+      <p>
+        <strong>Local-first development:</strong> Your application is built on OpenAI's API. Your team wants to test against Claude without rewriting the client. The proxy runs locally on a developer's machine, and the app just sees a different API endpoint. Swap back to OpenAI in production.
+      </p>
+
+      <p>
+        <strong>Quota and rate limiting:</strong> You're running multiple agents or multiple teams against the same API. You need per-user rate limits, quota tracking, and the ability to reject requests when you've hit your monthly budget. The proxy is the place to enforce this.
+      </p>
+
+      <p>
+        <strong>Observability:</strong> You want to log every API call—what prompt was sent, which model ran it, how many tokens were used, how long it took, what the result was. The API doesn't give you this. The proxy does.
+      </p>
+
+      <h2>The Real Win: It's Not About Claude vs OpenAI</h2>
+
+      <p>
+        Here's the thing: the proxy doesn't care if the CLI is Claude Code or something else. The pattern is reusable.
+      </p>
+
+      <p>
+        Want to add local Llama models to your OpenAI API? Wrap Ollama with an OpenAI adapter. Want to run multiple LLM providers side-by-side? Build adapters for each one, and use the proxy to orchestrate them.
+      </p>
+
+      <p>
+        The real win is that you've taken a tool (Claude Code CLI) that was designed for human workflows, and you've made it work for automated systems. You've built a layer that handles all the infrastructure concerns—process management, error handling, logging, routing—and left the model to do what it's good at: reasoning.
+      </p>
+
+      <p>
+        This is the pattern that scales. Not "switch to a different API," but "build a layer that abstracts the details of whichever system you're using."
+      </p>
+
+      <h2>What's Hard</h2>
+
+      <p>
+        The proxy isn't magic. You still need to handle:
+      </p>
+
+      <p>
+        <strong>Process lifecycle:</strong> Spawning a CLI process takes time. If every request spawns a new process, you'll timeout. If you reuse processes, you need to manage their state, detect crashes, and respawn cleanly.
+      </p>
+
+      <p>
+        <strong>Body parsing:</strong> The OpenAI API accepts various content types (text, JSON, base64-encoded files). The CLI accepts stdin. You need a router that understands both.
+      </p>
+
+      <p>
+        <strong>Streaming alignment:</strong> OpenAI's streaming format is not the same as the CLI's output. You need to parse the CLI's output, chunk it appropriately, and format it as OpenAI events. If you get the chunking wrong, clients break.
+      </p>
+
+      <p>
+        <strong>Type safety:</strong> The OpenAI API has strict request and response types. The CLI has its own format. You need type guards that prevent mismatches from silently corrupting downstream systems.
+      </p>
+
+      <p>
+        None of this is complicated. But it's all necessary, and it's all easy to get wrong.
+      </p>
+
+      <h2>The Job Search Angle</h2>
+
+      <p>
+        If you're building platform infrastructure around AI, this is the kind of work you need to be comfortable with. Not prompt engineering. Not fine-tuning. Not building the models themselves. But building the layers between models and systems.
+      </p>
+
+      <p>
+        You need someone who can:
+      </p>
+
+      <ul>
+        <li>Understand API contracts and how to translate between them.</li>
+        <li>Manage long-running processes and handle their failure modes.</li>
+        <li>Design for observability so you're not blind when something breaks.</li>
+        <li>Think about cost, latency, and throughput as first-class concerns.</li>
+        <li>Build abstractions that hide complexity without hiding failure modes.</li>
+      </ul>
+
+      <p>
+        This is infrastructure work. The infrastructure that lets models and systems talk to each other safely and at scale. It's not glamorous. But it's essential.
+      </p>
+
+      <h2>What's Coming</h2>
+
+      <p>
+        Over the next year, I expect to see:
+      </p>
+
+      <p>
+        <strong>Multi-hop reasoning:</strong> Agents that chain calls across different models (fast/cheap for initial draft, expensive model for refinement). The proxy becomes the router.
+      </p>
+
+      <p>
+        <strong>Fallback chains:</strong> "Try Opus. If it times out, fall back to Sonnet. If Sonnet fails, use Haiku." The proxy manages the chain transparently.
+      </p>
+
+      <p>
+        <strong>Context pooling:</strong> Long-running agents share a context pool. Multiple requests can read from the same shared memory. The proxy manages eviction and cache invalidation.
+      </p>
+
+      <p>
+        <strong>Cost guarantees:</strong> Clients request "solve this problem for under $0.50." The proxy estimates cost, checks the budget, and routes accordingly. If the budget is too tight, it says no upfront instead of failing halfway through.
+      </p>
+
+      <p>
+        These are all proxy-level concerns. The CLI doesn't need to know about them. The client doesn't need to know about them. The proxy handles the orchestration.
+      </p>
+
+      <h2>The Pattern That Matters</h2>
+
+      <p>
+        You have a tool (Claude Code CLI). You have clients (web apps, scripts, other systems). You build a layer in between that:
+      </p>
+
+      <ol>
+        <li>Translates one interface to another.</li>
+        <li>Handles all the operational concerns (process management, error handling, logging).</li>
+        <li>Adds value through routing, load balancing, and cost awareness.</li>
+        <li>Makes it trivial for clients to swap implementations (Claude → OpenAI → local Llama).</li>
+      </ol>
+
+      <p>
+        This pattern works for more than just LLMs. Every time you have a stateful system (a database, a message queue, an inference server) and you want to expose it to multiple clients reliably, you need this layer.
+      </p>
+
+      <p>
+        Claude Code CLI just happens to be a particularly good case study, because it's designed for human interaction, and making it work for machines forces you to think about all the infrastructure details.
+      </p>
+
+      <p>
+        The teams that win are the ones that get the infrastructure boring first, and the models smart second. Because once the plumbing works, the model can focus on what it's good at: reasoning.
+      </p>
+
+    </article>
+
+  </main>
+
+</body>
+</html>
