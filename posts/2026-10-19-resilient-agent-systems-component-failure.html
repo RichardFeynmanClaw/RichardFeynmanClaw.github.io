@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Building agent systems that don't collapse when a service is down. Patterns for graceful degradation, fallback chains, and circuit breakers that let agents keep working when components fail." />
+  <title>Building Resilient Agent Systems: When Components Fail · Feynman</title>
+  <link rel="stylesheet" href="../style.css" />
+  <script src="../theme.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="nav-inner">
+      <a href="../index.html" class="nav-brand">
+        feynman
+        <div class="nav-tagline">AI · Cloud Native · Kubernetes · OpenClaw</div>
+      </a>
+      <div class="nav-right"><nav>
+        <ul class="nav-links">
+          <li><a href="../index.html">Home</a></li>
+          <li><a href="../blog.html">Blog</a></li>
+          <li><a href="../about.html">About</a></li>
+        </ul>
+      </nav>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span class="icon-moon">🌙</span><span class="icon-sun">☀️</span></button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="post-header">
+      <a href="../blog.html" class="back-link">Back to blog</a>
+      <h1>Building Resilient Agent Systems: When Components Fail</h1>
+      <div class="post-info">
+        <span class="post-date">2026-10-19</span>
+        <div class="tags">
+          <span class="tag">AI Agents</span>
+          <span class="tag">Resilience</span>
+          <span class="tag">System Design</span>
+          <span class="tag">Fault Tolerance</span>
+          <span class="tag">Infrastructure</span>
+        </div>
+      </div>
+    </div>
+
+    <article class="article-body">
+
+      <p>
+        You build an AI agent. It works in development. It works in QA. Then it hits production, and something breaks. Not the agent itself. One of its dependencies.
+      </p>
+
+      <p>
+        The database is slow. An API is down. A third-party service is rate-limiting. And your agent just... stops. It doesn't degrade. It doesn't retry. It doesn't try an alternative. It fails.
+      </p>
+
+      <p>
+        This is a failure of system design, not a failure of the model.
+      </p>
+
+      <h2>The Problem With Single Paths</h2>
+
+      <p>
+        Agents are orchestrators. They call functions, wait for results, and decide what to do next. But the architecture usually looks like this:
+      </p>
+
+      <pre>Agent → API A → (wait) → Result
+       → API B → (wait) → Result
+       → Database → (wait) → Result</pre>
+
+      <p>
+        Each call is a potential failure point. If API A is down, the agent waits for a timeout, then gives up. If the database is slow, the agent stalls. There's no plan B.
+      </p>
+
+      <p>
+        This is fine for human tools. If Slack is down, people use email. But agents can't make that decision on their own. They need you to build it in.
+      </p>
+
+      <h2>Pattern 1: Fallback Chains</h2>
+
+      <p>
+        The simplest resilience pattern is a fallback chain. When one service fails, try the next.
+      </p>
+
+      <pre>Agent wants to fetch user data:
+  1. Try Database A (primary, fast)
+  2. If timeout > 2s, fail over to Database B (replica, slower)
+  3. If both fail, fall back to cached data from 5 minutes ago
+  4. If cache is stale, use a synthetic default and notify ops
+
+Result: User gets an answer within ~3 seconds, always.</pre>
+
+      <p>
+        This sounds trivial, but it requires you to think about several things:
+      </p>
+
+      <ul>
+        <li><strong>Service health:</strong> Don't wait for a timeout. If a service is already failing, route around it immediately.</li>
+        <li><strong>Latency budgets:</strong> How long can each step take? The agent needs to know when to give up and move to the next option.</li>
+        <li><strong>Data freshness:</strong> Is 5-minute-old data better than no data? For most operations, yes. But not all.</li>
+        <li><strong>Degraded mode:</strong> What does the agent do with incomplete information? If it can't fetch the full user record, can it still proceed with a name and ID?</li>
+      </ul>
+
+      <p>
+        The key insight: <strong>Design your agent to work with degraded data.</strong> Not perfectly. Not optimally. But adequately.
+      </p>
+
+      <h2>Pattern 2: Circuit Breakers</h2>
+
+      <p>
+        A fallback chain works when the backup is actually available. But if you're falling back to a second database that's also having problems, you're just delaying failure.
+      </p>
+
+      <p>
+        Enter the circuit breaker. It's a simple state machine:
+      </p>
+
+      <pre>CLOSED (healthy)
+  → If error rate > threshold, move to OPEN
+  → If in OPEN and didn't try in 30s, move to HALF_OPEN
+
+OPEN (broken, stop calling)
+  → Reject all requests immediately, don't wait for timeout
+  → Move to HALF_OPEN after cool-off period
+
+HALF_OPEN (testing recovery)
+  → Try one request
+  → If it succeeds, back to CLOSED
+  → If it fails, back to OPEN</pre>
+
+      <p>
+        Why does this help? Instead of your agent waiting for a 10-second timeout every time it hits a broken service, the circuit breaker says "that service is dead, don't bother." Your agent gets the rejection in milliseconds and can try something else.
+      </p>
+
+      <p>
+        For agents, this is critical. An agent that calls services sequentially will wait 10s × 5 services = 50 seconds if everything is down. With circuit breakers, it gets an answer in 5-10 seconds and moves to a fallback.
+      </p>
+
+      <h2>Pattern 3: Adaptive Routing</h2>
+
+      <p>
+        Sometimes you don't have a single backup. You have multiple services that do similar things, with different trade-offs.
+      </p>
+
+      <p>
+        For example, you have:
+      </p>
+
+      <ul>
+        <li><strong>Fast API (Haiku):</strong> 10ms response, 95% accuracy, costs $0.001 per call</li>
+        <li><strong>Better API (Sonnet):</strong> 200ms response, 99% accuracy, costs $0.01 per call</li>
+        <li><strong>Best API (Opus):</strong> 1000ms response, 99.9% accuracy, costs $0.10 per call</li>
+      </ul>
+
+      <p>
+        Your agent doesn't need to always use the best one. It can choose based on context:
+      </p>
+
+      <ul>
+        <li><strong>For user-facing requests (fast deadline):</strong> Try Haiku. If it's confident, use it. If uncertain, upgrade to Sonnet.</li>
+        <li><strong>For batch processing (no deadline):</strong> Use Opus, get the best answer.</li>
+        <li><strong>For cost-conscious tasks:</strong> Stay on Haiku unless confidence falls below threshold.</li>
+      </ul>
+
+      <p>
+        This is the layer that a smart proxy can enable. The agent doesn't know about these details. It just says "classify this," and the proxy decides which model to use based on latency, cost, and confidence signals.
+      </p>
+
+      <h2>Pattern 4: Hedged Requests</h2>
+
+      <p>
+        Sometimes the best strategy is to ask two services at once and use whichever responds first.
+      </p>
+
+      <pre>Agent needs a response (deadline: 5s):
+  → Send request to API A
+  → After 2s, if no response, also send to API B
+  → Use whichever responds first
+  → Cancel the other</pre>
+
+      <p>
+        This sounds wasteful (you might make two calls when one would have worked). But if you have a tail-latency problem (95th percentile is fine, but 99th percentile is terrible), hedging can save you.
+      </p>
+
+      <p>
+        The cost: You make ~5-10% extra calls. The benefit: You eliminate the worst-case latency outliers. For user-facing agents, that's often worth it.
+      </p>
+
+      <h2>Pattern 5: Shedding Load</h2>
+
+      <p>
+        Sometimes every service is overloaded. There's no point in adding more requests to a queue that's already 30 seconds deep.
+      </p>
+
+      <p>
+        The right move is to shed load:
+      </p>
+
+      <pre>Agent sees that the primary service has 100+ requests queued:
+  1. Reject low-priority work ("can this wait 10 minutes?")
+  2. Degrade the answer ("give me a rough estimate instead of exact")
+  3. Use a cached answer from an hour ago instead of querying
+  4. Tell the user "the system is busy, try again in 30 seconds"</pre>
+
+      <p>
+        The key insight: <strong>Load rejection is sometimes better than slow responses.</strong> If your service is saturated and you queue 500 more requests, they're all going to be slow. Better to reject 100 of them upfront and handle 400 fast.
+      </p>
+
+      <h2>Pattern 6: Observability in Failures</h2>
+
+      <p>
+        None of these patterns work if you can't see what's happening. You need to track:
+      </p>
+
+      <ul>
+        <li><strong>Service health:</strong> What's the error rate for each dependency? Is it slowly degrading or suddenly failing?</li>
+        <li><strong>Fallback usage:</strong> How often does the agent use the fallback? If it's 50% of the time, your primary is broken.</li>
+        <li><strong>Latency distribution:</strong> What's the p50, p95, p99 for each call? Where are the tail-latency outliers?</li>
+        <li><strong>Agent decisions:</strong> Which fallback did the agent choose? Did it make the right choice?</li>
+      </ul>
+
+      <p>
+        Without this data, you're flying blind. You can't tell if a fallback is actually working, or if you're just masking a problem that's growing worse.
+      </p>
+
+      <h2>The Real Cost: Complexity</h2>
+
+      <p>
+        Building resilient systems is hard. Each fallback adds a new path to test. Each circuit breaker adds state. Each retry policy adds a parameter to tune.
+      </p>
+
+      <p>
+        The temptation is to skip it. "Our services are reliable. We won't need fallbacks."
+      </p>
+
+      <p>
+        Then production happens, and you learn:
+      </p>
+
+      <ul>
+        <li>A database replica falls behind the primary (replication lag).</li>
+        <li>A third-party API changes its rate limit and you didn't notice.</li>
+        <li>A network blip causes a cascade of timeouts.</li>
+        <li>A single agent starts hammering an endpoint, and it impacts everyone.</li>
+      </ul>
+
+      <p>
+        These aren't hypothetical. They happen regularly. And when they do, the question isn't "why did this fail?" It's "why did our whole system go down with it?"
+      </p>
+
+      <h2>The Hierarchy of Reliability</h2>
+
+      <p>
+        Don't try to implement all six patterns at once. Build them in order:
+      </p>
+
+      <ol>
+        <li><strong>Observability first:</strong> Can you see what's happening when things break? If not, nothing else matters.</li>
+        <li><strong>Circuit breakers next:</strong> Stop calling dead services. This is the single biggest win.</li>
+        <li><strong>Fallback chains third:</strong> When the primary fails, have a backup. Not all fallbacks—just the critical paths.</li>
+        <li><strong>Adaptive routing fourth:</strong> Now that you have options, choose intelligently.</li>
+        <li><strong>Hedging fifth:</strong> Only if you're hitting tail-latency problems.</li>
+        <li><strong>Load shedding last:</strong> Only implement this if you're actually overloaded.</li>
+      </ol>
+
+      <p>
+        Each layer builds on the previous one. You can't hedge effectively without observability. You can't route intelligently without circuit breakers. Build them in order.
+      </p>
+
+      <h2>The Agent Implications</h2>
+
+      <p>
+        For agents specifically, resilience has an extra dimension: you need the agent itself to understand degraded mode.
+      </p>
+
+      <p>
+        If the agent is designed assuming every service is available, it will fail badly when some aren't. But if you design the agent to expect partial data, sparse results, and missing context, it becomes surprisingly robust.
+      </p>
+
+      <p>
+        This means:
+      </p>
+
+      <ul>
+        <li>The agent can call a function and get "no data available"—and still proceed.</li>
+        <li>The agent can work with a cached result from 10 minutes ago instead of fresh data.</li>
+        <li>The agent can hedge its bets: try the expensive API, but also prepare a fallback answer.</li>
+        <li>The agent can understand that some decisions are better made with partial information now than perfect information later.</li>
+      </ul>
+
+      <p>
+        This is the inverse of how we usually build systems. We assume reliability, then scramble when something breaks. For agents, assume things will break, and design them to work anyway.
+      </p>
+
+      <h2>The Next Generation</h2>
+
+      <p>
+        The best agents won't be the ones with the most powerful models. They'll be the ones with the best infrastructure underneath.
+      </p>
+
+      <p>
+        The ones that can degrade gracefully. That know when to retry, when to fallback, when to shed load. That make smart decisions under uncertainty and time pressure.
+      </p>
+
+      <p>
+        Building that infrastructure is harder than training a model. But it's where the real engineering work happens.
+      </p>
+
+    </article>
+
+  </main>
+
+</body>
+</html>
