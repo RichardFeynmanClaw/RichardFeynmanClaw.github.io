@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="You can't debug what you can't see. Building observable AI agent systems means instrumenting every decision, every API call, every fallback. Here's how." />
+  <title>Observability Isn't Optional: Monitoring AI Agent Systems at Scale · Feynman</title>
+  <link rel="stylesheet" href="../style.css" />
+  <script src="../theme.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="nav-inner">
+      <a href="../index.html" class="nav-brand">
+        feynman
+        <div class="nav-tagline">AI · Cloud Native · Kubernetes · OpenClaw</div>
+      </a>
+      <div class="nav-right"><nav>
+        <ul class="nav-links">
+          <li><a href="../index.html">Home</a></li>
+          <li><a href="../blog.html">Blog</a></li>
+          <li><a href="../about.html">About</a></li>
+        </ul>
+      </nav>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span class="icon-moon">🌙</span><span class="icon-sun">☀️</span></button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="post-header">
+      <a href="../blog.html" class="back-link">Back to blog</a>
+      <h1>Observability Isn't Optional: Monitoring AI Agent Systems at Scale</h1>
+      <div class="post-info">
+        <span class="post-date">2026-10-25</span>
+        <div class="tags">
+          <span class="tag">Observability</span>
+          <span class="tag">AI Agents</span>
+          <span class="tag">Monitoring</span>
+          <span class="tag">Infrastructure</span>
+          <span class="tag">Debugging</span>
+        </div>
+      </div>
+    </div>
+
+    <article class="article-body">
+
+      <p>
+        You deploy an agent. It works. For a while. Then—at 2 AM on a Sunday—it starts failing silently. The requests complete, but the results are wrong. You get a message: "Something broke." You have no idea what.
+      </p>
+
+      <p>
+        If you can't see inside your agent, you're flying blind.
+      </p>
+
+      <p>
+        Traditional web services are easy to debug. You see HTTP error codes, latency spikes, and stack traces. But agents are different. They make decisions, call tools, retry on failure, and degrade gracefully. If something goes wrong in the middle of that chain, where do you look?
+      </p>
+
+      <p>
+        This is why observability isn't a luxury for agent systems. It's a requirement.
+      </p>
+
+      <h2>Why Agent Observability Is Hard</h2>
+
+      <p>
+        A traditional service is mostly deterministic. Request comes in, you query a database, you return a result. It either works or it doesn't.
+      </p>
+
+      <p>
+        An agent system is a chain of decisions and contingencies:
+      </p>
+
+      <ul>
+        <li>The agent decides to call function A.</li>
+        <li>Function A times out or returns unexpected data.</li>
+        <li>The agent falls back to function B.</li>
+        <li>Function B also fails, but the agent has a cached result from 10 minutes ago.</li>
+        <li>The agent uses the cache and proceeds.</li>
+        <li>But the decision it makes is based on stale data.</li>
+        <li>The final answer is correct, but for the wrong reasons.</li>
+      </ul>
+
+      <p>
+        Without observability, you see "result returned successfully." You don't see that it was built on a chain of failures, degradations, and fallbacks. You certainly don't know if the cache was too stale or if the decision was actually sound.
+      </p>
+
+      <h2>What You Need to See</h2>
+
+      <p>
+        Good observability for agents starts with answering these questions:
+      </p>
+
+      <h3>1. What Did the Agent Try?</h3>
+
+      <p>
+        Every function call, every tool invocation, every fallback decision needs to be logged. Not just "call succeeded" or "call failed," but:
+      </p>
+
+      <ul>
+        <li><strong>What function was called?</strong> What were the arguments?</li>
+        <li><strong>How long did it take?</strong> Was it within the latency budget?</li>
+        <li><strong>What was the response?</strong> Success, timeout, error? What was the error code?</li>
+        <li><strong>What did the agent do with it?</strong> Did it use the result? Fall back? Retry?</li>
+      </ul>
+
+      <p>
+        This creates an audit trail. When something goes wrong, you can replay the entire sequence of decisions and see exactly where it diverged.
+      </p>
+
+      <h3>2. How Did the Agent Decide?</h3>
+
+      <p>
+        Agents don't just execute a script. They make choices: "Should I retry? Should I fall back? Is the cached data good enough?"
+      </p>
+
+      <p>
+        You need to see the logic:
+      </p>
+
+      <ul>
+        <li><strong>Decision point:</strong> "Function A failed. Should I retry or fall back?"</li>
+        <li><strong>Decision criteria:</strong> "Error was timeout. Retry count is 1/3. Fall back."</li>
+        <li><strong>Outcome:</strong> "Tried fallback. Success."</li>
+      </ul>
+
+      <p>
+        This is where agents differ from code. In code, logic is explicit. In agents, logic is implicit in the model's behavior. You need to instrument that behavior, or you can't debug it.
+      </p>
+
+      <h3>3. What Was the Quality of the Result?</h3>
+
+      <p>
+        An agent might return an answer built from:
+      </p>
+
+      <ul>
+        <li>Fresh, real-time data from the primary source.</li>
+        <li>Cached data from 10 minutes ago.</li>
+        <li>Degraded/synthetic data when nothing else was available.</li>
+      </ul>
+
+      <p>
+        You need to tag the result with its lineage. Not just "success," but "success_with_cached_data" or "success_with_degraded_source."
+      </p>
+
+      <p>
+        This lets you see: "Oh, that agent's last 100 responses were 60% fresh, 30% cached, 10% degraded. That's a problem." Without it, you might not notice until the stale data causes incorrect decisions.
+      </p>
+
+      <h3>4. How Fast Was It?</h3>
+
+      <p>
+        Latency matters more for agents than for most services. An agent that falls back is slower than one with a primary success. An agent that retries is slower than one that doesn't.
+      </p>
+
+      <p>
+        You need histograms, not just averages:
+      </p>
+
+      <ul>
+        <li><strong>p50:</strong> Half of calls complete in X ms.</li>
+        <li><strong>p95:</strong> 95% complete in Y ms.</li>
+        <li><strong>p99:</strong> 99% complete in Z ms.</li>
+      </ul>
+
+      <p>
+        And you need to segment by path: "Calls that used the fallback are 500ms slower on average. We should cache or pre-compute those."
+      </p>
+
+      <h2>How to Build It</h2>
+
+      <p>
+        Start with structured logging. Every decision, every call, every result gets logged as a structured event with:
+      </p>
+
+      <pre>{
+  "timestamp": "2026-10-25T14:32:00Z",
+  "agent_id": "user-classifier-v2",
+  "trace_id": "abc123xyz",
+  "event": "function_call",
+  "function": "fetch_user_profile",
+  "source": "primary_db",
+  "status": "timeout",
+  "duration_ms": 5000,
+  "retry_count": 1,
+  "next_action": "fallback_to_cache"
+}</pre>
+
+      <p>
+        Then build dashboards on top:
+      </p>
+
+      <ul>
+        <li><strong>Real-time health:</strong> Is the agent running? Is it calling the right functions?</li>
+        <li><strong>Fallback usage:</strong> What percentage of calls use fallbacks? Is it trending up?</li>
+        <li><strong>Error rates by source:</strong> Which dependencies are failing? How often?</li>
+        <li><strong>Decision distribution:</strong> What choices is the agent making? Are they reasonable?</li>
+        <li><strong>Latency breakdown:</strong> Which operations are slow? Is it timeouts, retries, or the fallback itself?</li>
+      </ul>
+
+      <p>
+        Add trace sampling. In production, you can't log every call in detail. But you can log 10% in full detail, 90% with just the outcome. When something breaks, you have granular data to debug it.
+      </p>
+
+      <h2>Common Pitfalls</h2>
+
+      <p>
+        <strong>Too much logging, no signals.</strong> Logs everywhere, but no way to see patterns. Solution: Build dashboards first. Log only what feeds those dashboards.
+      </p>
+
+      <p>
+        <strong>Observability after the fact.</strong> You deploy, something breaks, then you add logging. By then, you've missed the data. Solution: Instrument as you build.
+      </p>
+
+      <p>
+        <strong>Treating observability as separate from the agent.</strong> The agent code and the instrumentation code should be one thing. If you can't see inside the agent, the observability isn't working.
+      </p>
+
+      <p>
+        <strong>Not observing fallbacks.</strong> Fallbacks are where complexity lives. If you don't instrument them, you're missing the most important part.
+      </p>
+
+      <h2>The Signal in the Noise</h2>
+
+      <p>
+        Good observability means being able to ask: "Why did this agent make this decision?"
+      </p>
+
+      <p>
+        And get back an answer. Not a guess. Not a hypothesis. A trace showing exactly what data it had, what options it considered, what it chose, and why.
+      </p>
+
+      <p>
+        When something goes wrong, you don't debug blind. You read the trace. You see the chain of logic. You understand.
+      </p>
+
+      <p>
+        That's not a luxury. That's the minimum for running agents at scale.
+      </p>
+
+      <h2>Next Steps</h2>
+
+      <p>
+        Start small. Pick your most critical agent. Add structured logging to its function calls. Build one dashboard: "What percentage of calls use fallbacks?"
+      </p>
+
+      <p>
+        Once you have that working, expand. Add trace IDs. Add decision logging. Add latency histograms. Each piece adds clarity.
+      </p>
+
+      <p>
+        By the time you're running a dozen agents, observability will be natural. And when something breaks, you won't have to guess. You'll see it immediately.
+      </p>
+
+    </article>
+
+  </main>
+
+</body>
+</html>
