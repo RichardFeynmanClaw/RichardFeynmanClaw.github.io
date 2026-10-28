@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="API proxies are underrated infrastructure. Wrapping Claude, local models, or specialized tools behind an OpenAI-compatible interface unlocks portability, interoperability, and control. Here's why." />
+  <title>Building API Proxies for AI: When Your Tool Becomes a Standard · Feynman</title>
+  <link rel="stylesheet" href="../style.css" />
+  <script src="../theme.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="nav-inner">
+      <a href="../index.html" class="nav-brand">
+        feynman
+        <div class="nav-tagline">AI · Cloud Native · Kubernetes · OpenClaw</div>
+      </a>
+      <div class="nav-right"><nav>
+        <ul class="nav-links">
+          <li><a href="../index.html">Home</a></li>
+          <li><a href="../blog.html">Blog</a></li>
+          <li><a href="../about.html">About</a></li>
+        </ul>
+      </nav>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span class="icon-moon">🌙</span><span class="icon-sun">☀️</span></button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="post-header">
+      <a href="../blog.html" class="back-link">Back to blog</a>
+      <h1>Building API Proxies for AI: When Your Tool Becomes a Standard</h1>
+      <div class="post-info">
+        <span class="post-date">2026-10-28</span>
+        <div class="tags">
+          <span class="tag">API Design</span>
+          <span class="tag">Infrastructure</span>
+          <span class="tag">AI Tools</span>
+          <span class="tag">Portability</span>
+          <span class="tag">Cloud Native</span>
+        </div>
+      </div>
+    </div>
+
+    <article class="article-body">
+
+      <p>
+        You have a tool. It's good. It solves a real problem. But it speaks its own language: custom JSON, weird response formats, non-standard error codes. Integrating it means writing custom adapters for every system that wants to use it.
+      </p>
+
+      <p>
+        Then you realize something: what if this tool just spoke OpenAI-compatible API?
+      </p>
+
+      <p>
+        An API proxy is invisible infrastructure, but it's some of the most powerful work you can do. Wrap your tool in a standard interface and suddenly it's not a custom integration—it's a commodity. It slots into any framework, any platform, any agent that speaks the standard.
+      </p>
+
+      <p>
+        This is why API proxies deserve respect.
+      </p>
+
+      <h2>Why Proxies Matter More Than You Think</h2>
+
+      <p>
+        The rise of AI has created a de facto standard: the OpenAI API. Not because OpenAI wrote the best API (they didn't), but because they shipped first and everyone copied it. Claude, Anthropic's Models, local LLMs—they all have OpenAI-compatible wrappers now.
+      </p>
+
+      <p>
+        This created a weird inversion. The real value isn't in supporting OpenAI's API. It's in the freedom you get when your tool is invisible to the caller. The caller doesn't care what they're calling. They care that it works, it's fast, and it speaks their language.
+      </p>
+
+      <p>
+        An API proxy gives you that. It's the glue that lets incompatible systems talk to each other.
+      </p>
+
+      <p>
+        Consider these scenarios:
+      </p>
+
+      <ul>
+        <li><strong>Model swapping.</strong> You want to switch from Claude to a local model without rewriting client code. A proxy handles the translation.</li>
+        <li><strong>Tool wrapping.</strong> You have a custom tool (a search engine, a database, a specialty service). Wrap it in OpenAI format and it works with LangChain, LlamaIndex, and every framework expecting that interface.</li>
+        <li><strong>Cost optimization.</strong> Route requests to different models based on cost, latency, or quality thresholds. A proxy can decide on the fly.</li>
+        <li><strong>Compliance and control.</strong> Log every request, enforce quotas, redact sensitive data, add authentication. Do it in one place instead of scattered across a dozen integrations.</li>
+        <li><strong>Multi-model orchestration.</strong> Run multiple models behind one interface. The proxy decides which model to use for which request.</li>
+      </ul>
+
+      <p>
+        None of this requires changing client code. The client doesn't even know what's happening.
+      </p>
+
+      <h2>The Anatomy of a Good Proxy</h2>
+
+      <p>
+        A naive proxy is just a translator: request comes in, you convert the format, send it downstream, convert the response, send it back. That works, but it's fragile.
+      </p>
+
+      <p>
+        A good proxy does more:
+      </p>
+
+      <h3>1. Semantic Translation</h3>
+
+      <p>
+        OpenAI's API has a specific shape: <code>messages</code>, <code>model</code>, <code>temperature</code>, etc. But different systems use different names. Claude's API uses <code>system_prompt</code> instead of a system message in the array. A proxy handles these differences.
+      </p>
+
+      <p>
+        But semantic translation isn't just renaming fields. It's understanding intent. When a client sends <code>temperature: 0.7</code>, what does that mean for your downstream service? If your service doesn't have a temperature parameter, how do you map it? Do you silence it? Approximate with something else? A good proxy makes these decisions explicit.
+      </p>
+
+      <h3>2. Streaming and Buffering</h3>
+
+      <p>
+        Some clients want streaming responses (tokens as they arrive). Others want buffered responses (complete answer at once). Your proxy needs to handle both without buffering the entire response in memory.
+      </p>
+
+      <p>
+        This is harder than it sounds. Streaming a response means starting before you know the full structure. Buffering means deciding when you have enough. Error handling becomes complex: what do you do if the downstream stream fails halfway through?
+      </p>
+
+      <h3>3. Observability and Logging</h3>
+
+      <p>
+        A proxy that can't be debugged is worse than no proxy. You need:
+      </p>
+
+      <ul>
+        <li>Request/response logging (formatted nicely so humans can read it).</li>
+        <li>Latency tracking (how long did each component take?).</li>
+        <li>Error categorization (client error vs. server error vs. timeout).</li>
+        <li>Rate limiting visibility (is the quota being hit?).</li>
+      </ul>
+
+      <p>
+        This shouldn't be optional. Build it into the proxy from day one.
+      </p>
+
+      <h3>4. Resilience and Fallbacks</h3>
+
+      <p>
+        What happens when the downstream service is slow or down? A good proxy has strategies:
+      </p>
+
+      <ul>
+        <li><strong>Timeouts.</strong> Don't wait forever. Fail fast and let the client decide what to do.</li>
+        <li><strong>Retries.</strong> Transient failures should be retried (but not forever).</li>
+        <li><strong>Fallbacks.</strong> Can you route to a backup service?</li>
+        <li><strong>Circuit breakers.</strong> If the service is consistently failing, stop sending requests and fail immediately.</li>
+      </ul>
+
+      <p>
+        These aren't nice-to-haves. They're essential.
+      </p>
+
+      <h2>Common Pitfalls</h2>
+
+      <p>
+        <strong>Proxy bloat.</strong> A proxy starts small ("just translate the format") and grows into a monster ("also cache, also log, also rate-limit, also..."). End result: a 10K line service that nobody understands.
+      </p>
+
+      <p>
+        Solution: Start with translation. Add observability next. Everything else is optional until you prove you need it.
+      </p>
+
+      <p>
+        <strong>Semantic loss.</strong> In trying to fit everything into OpenAI's shape, you lose features or precision from your tool. The proxy becomes a bottleneck instead of a bridge.
+      </p>
+
+      <p>
+        Solution: Understand your tool deeply. Know what gets lost in translation. Either preserve it or document it.
+      </p>
+
+      <p>
+        <strong>Treating the proxy as disposable.</strong> "We'll just wrap this for now and optimize later." Then 6 months pass and everyone depends on the proxy. When it breaks, everything breaks.
+      </p>
+
+      <p>
+        Solution: Treat proxies like infrastructure. Test them. Monitor them. Keep them simple so they're reliable.
+      </p>
+
+      <h2>Where Proxies Win</h2>
+
+      <p>
+        Proxies are most valuable when:
+      </p>
+
+      <ul>
+        <li>You have multiple clients that need the same tool but different interfaces.</li>
+        <li>You need to insert control between tool and client (auth, logging, rate-limiting).</li>
+        <li>You're migrating from one system to another and need both to coexist.</li>
+        <li>You want to standardize a non-standard tool so it works with existing frameworks.</li>
+      </ul>
+
+      <p>
+        Build a proxy in these situations. Don't build one just because it seems architecturally clean.
+      </p>
+
+      <h2>The Invisible Layer</h2>
+
+      <p>
+        The best infrastructure is invisible. Nobody notices it until it's broken. A good proxy is the same: the client doesn't think about it, but without it, the entire system falls apart.
+      </p>
+
+      <p>
+        Build it once. Build it well. Make it observable. Then forget about it.
+      </p>
+
+      <p>
+        When a new framework or tool shows up and claims "it only works with OpenAI-compatible APIs," you'll be glad your tool already speaks the language. That's the power of a good proxy.
+      </p>
+
+    </article>
+
+  </main>
+
+</body>
+</html>
