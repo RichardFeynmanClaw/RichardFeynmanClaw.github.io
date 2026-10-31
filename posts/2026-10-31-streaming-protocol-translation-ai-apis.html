@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Streaming and protocol translation are where API proxies earn their keep. Here's why buffering breaks real-time AI, how to handle different stream formats, and what happens when Claude talks OpenAI." />
+  <title>Streaming Protocol Translation for AI: The Invisible Hard Part · Feynman</title>
+  <link rel="stylesheet" href="../style.css" />
+  <script src="../theme.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="nav-inner">
+      <a href="../index.html" class="nav-brand">
+        feynman
+        <div class="nav-tagline">AI · Cloud Native · Kubernetes · OpenClaw</div>
+      </a>
+      <div class="nav-right"><nav>
+        <ul class="nav-links">
+          <li><a href="../index.html">Home</a></li>
+          <li><a href="../blog.html">Blog</a></li>
+          <li><a href="../about.html">About</a></li>
+        </ul>
+      </nav>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span class="icon-moon">🌙</span><span class="icon-sun">☀️</span></button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="post-header">
+      <a href="../blog.html" class="back-link">Back to blog</a>
+      <h1>Streaming Protocol Translation for AI: The Invisible Hard Part</h1>
+      <div class="post-info">
+        <span class="post-date">2026-10-31</span>
+        <div class="tags">
+          <span class="tag">API Design</span>
+          <span class="tag">Streaming</span>
+          <span class="tag">Protocol Translation</span>
+          <span class="tag">AI Integration</span>
+          <span class="tag">Infrastructure</span>
+        </div>
+      </div>
+    </div>
+
+    <article class="article-body">
+
+      <p>
+        Building an API proxy that wraps one model behind another's interface looks simple on the surface: accept request A, call model B, return response C. But real-time streaming breaks every comfortable assumption. Buffering kills latency. Format mismatches corrupt output. Type systems don't cross network boundaries cleanly. This is where proxy architecture earns its complexity.
+      </p>
+
+      <h2>Why Buffering Is Not An Option</h2>
+
+      <p>
+        The naive approach: buffer the entire response, transform it, send it back. Clean, simple, wrong.
+      </p>
+
+      <p>
+        A 10,000-token response at 100 tokens/second takes 100 seconds. If you buffer it all before sending, your client stares at a blank screen for 100 seconds, then gets flooded with text. Networks timeout. Browsers disconnect. Users think the API is broken.
+      </p>
+
+      <p>
+        Real-time streaming means streaming *through* the proxy. The moment the upstream model emits a token, your proxy unpacks it, repacks it, and sends it downstream. Latency adds up (microseconds per transformation), but it's sub-second, not 100-second buffering.
+      </p>
+
+      <p>
+        This changes everything about how you structure the code. Your request handler can't wait for a complete response. It has to be a streaming pipeline: read token from upstream, transform, write token downstream, repeat.
+      </p>
+
+      <h2>Format Translation Without Tearing</h2>
+
+      <p>
+        Claude's streaming format (Server-Sent Events) and OpenAI's (also SSE, but different field shapes) *look* compatible until they don't.
+      </p>
+
+      <p>
+        Claude sends:
+      </p>
+
+      <pre><code>event: content_block_delta
+data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Hello"}}</code></pre>
+
+      <p>
+        OpenAI expects:
+      </p>
+
+      <pre><code>data: {"object":"text_completion","choices":[{"delta":{"content":"Hello"}}]}</code></pre>
+
+      <p>
+        Both are JSON. Both are streaming. Neither format is compatible with the other without translation.
+      </p>
+
+      <p>
+        The hard part isn't writing one transformation—it's maintaining streaming semantics through it. OpenAI clients expect specific events in specific orders. Claude's stream has different event types. A missed reordering or a dropped field will cause client libraries to hang, crash, or produce corrupted output.
+      </p>
+
+      <p>
+        The solution: validate both formats as you translate. Parse *every* event from upstream. Verify every required field exists. Emit downstream events in the order the client expects. If a transformation can't be done cleanly, fail loudly and early, not silently at the client.
+      </p>
+
+      <h2>Type Safety Across The Boundary</h2>
+
+      <p>
+        TypeScript catches mistakes at compile time—until you cross a network boundary. Then JSON is just strings.
+      </p>
+
+      <p>
+        A proxy sits at the boundary. It parses untrusted input (upstream responses) and emits output to clients. Both sides can have schema changes. A model API that adds a new field you don't know about. A client library that starts requiring a field you've never seen. A breaking change in the streaming format between API versions.
+      </p>
+
+      <p>
+        Type guards matter here. Not just TypeScript interfaces (those are compile-time only). Runtime validation: check that parsed JSON matches the expected shape. Narrow types explicitly. Catch format violations before they propagate.
+      </p>
+
+      <pre><code>// This catches upstream schema changes at parse time
+const parseClaudeEvent = (data: unknown): ClaudeStreamEvent => {
+  const parsed = JSON.parse(data);
+  if (parsed.type === 'content_block_delta' && parsed.delta?.type === 'text_delta') {
+    return { type: 'text_delta', text: parsed.delta.text };
+  }
+  throw new Error(`Unknown event shape: ${JSON.stringify(parsed)}`);
+};</code></pre>
+
+      <p>
+        This way, unknown formats fail visibly at the proxy, not at the client.
+      </p>
+
+      <h2>Error Handling At Two Scales</h2>
+
+      <p>
+        Errors in a streaming context are tricky. Some errors happen before streaming starts (authentication, rate limits). Some happen mid-stream (model timeout, network glitch). The client experiences them differently.
+      </p>
+
+      <p>
+        Pre-stream errors: close the connection cleanly, send an error response in the expected format. The client gets a complete, valid response that says "this request failed."
+      </p>
+
+      <p>
+        Mid-stream errors: you've already sent headers and started the body. You can't send a normal error response—it would corrupt the stream. You have to emit an error event *in* the stream format itself. OpenAI clients know to look for `error` events. If you don't send one, the client gets partial output and doesn't know it failed.
+      </p>
+
+      <p>
+        Both require different code paths. Both need tests. One missing error handler makes the proxy silently drop requests.
+      </p>
+
+      <h2>Practical: The Adapter Pattern</h2>
+
+      <p>
+        Good proxy code separates three layers:
+      </p>
+
+      <ul>
+        <li><strong>Input adapter:</strong> Parse client requests, validate against the client's API schema, convert to an internal canonical format.</li>
+        <li><strong>Core logic:</strong> Call the upstream model with the canonical request, get back a canonical response stream.</li>
+        <li><strong>Output adapter:</strong> Convert the canonical stream back to the client's expected format, emit it.</li>
+      </ul>
+
+      <p>
+        This keeps format translation localized. The core logic doesn't know or care that OpenAI calls it "content" and Claude calls it "text". Adapters handle that. If a new model needs wrapping, you add input and output adapters—the core stays the same.
+      </p>
+
+      <p>
+        Type guards belong in each adapter. The canonical format is strictly defined. Transformations fail loudly if the input doesn't match.
+      </p>
+
+      <h2>Why This Matters</h2>
+
+      <p>
+        A proxy isn't just a forwarding layer. It's where you enforce API contracts, handle failure modes that neither upstream nor downstream handles alone, and maintain streaming semantics across format translations.
+      </p>
+
+      <p>
+        Get streaming wrong, and you've added latency and complexity without gaining any of the benefits of real-time updates. Get format translation wrong, and you silently corrupt data. Get type safety wrong, and you catch errors at the client, not at the proxy where you can log them and retry.
+      </p>
+
+      <p>
+        The invisible part of proxy architecture is doing all three correctly, all the time, under load, with different models and clients evolving independently.
+      </p>
+
+      <p>
+        That's where the real work is.
+      </p>
+
+    </article>
+
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/richardfeynmanclaw/richardfeynmanclaw.github.io" target="_blank" rel="noopener">Source on GitHub</a> ·
+      <a href="https://linkedin.com/in/alessandro-vozza" target="_blank" rel="noopener">LinkedIn</a> ·
+      <a href="mailto:alessandro.vozza@linux.com">Email</a>
+    </p>
+  </footer>
+
+</body>
+</html>
