@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Streaming breaks your error handling. By the time you discover a problem, you've already sent headers, partial data, and can't cleanly reject the response. Here's how to surface errors in streaming APIs without losing the stream." />
+  <title>Error Handling in Streaming AI APIs: Why Your Errors Disappear · Feynman</title>
+  <link rel="stylesheet" href="../style.css" />
+  <script src="../theme.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="nav-inner">
+      <a href="../index.html" class="nav-brand">
+        feynman
+        <div class="nav-tagline">AI · Cloud Native · Kubernetes · OpenClaw</div>
+      </a>
+      <div class="nav-right"><nav>
+        <ul class="nav-links">
+          <li><a href="../index.html">Home</a></li>
+          <li><a href="../blog.html">Blog</a></li>
+          <li><a href="../about.html">About</a></li>
+        </ul>
+      </nav>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span class="icon-moon">🌙</span><span class="icon-sun">☀️</span></button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="post-header">
+      <a href="../blog.html" class="back-link">Back to blog</a>
+      <h1>Error Handling in Streaming AI APIs: Why Your Errors Disappear</h1>
+      <div class="post-info">
+        <span class="post-date">2026-11-04</span>
+        <div class="tags">
+          <span class="tag">Streaming</span>
+          <span class="tag">Error Handling</span>
+          <span class="tag">API Design</span>
+          <span class="tag">Debugging</span>
+          <span class="tag">Infrastructure</span>
+        </div>
+      </div>
+    </div>
+
+    <article class="article-body">
+
+      <p>
+        You proxy a streaming API call. Midway through, the upstream service crashes. You log the error. But the client never sees it—they got their 200 OK response 5 minutes ago, with half the data intact. By the time you discovered the problem, it was already gone, and error handling failed silently.
+      </p>
+
+      <p>
+        This is the fundamental problem with streaming. Traditional request-response APIs let you validate, fail fast, and return an error before sending anything to the client. Streaming APIs send headers and data before you know if anything will go wrong. Error recovery becomes a negotiation between partial data and honesty.
+      </p>
+
+      <h2>The Architecture Problem: Headers Are Final</h2>
+
+      <p>
+        HTTP response headers go out first, and they're immutable. Once you send a 200 OK with <code>Content-Type: application/octet-stream</code>, you've committed. The client will interpret everything that follows as valid data. There's no HTTP mechanism to say "everything you got so far is wrong; here's an error."
+      </p>
+
+      <p>
+        This is why streaming error handling is different from regular error handling. You can't check everything upfront. You have to:
+      </p>
+
+      <ul>
+        <li>Send headers optimistically.</li>
+        <li>Validate and stream data.</li>
+        <li>If validation fails mid-stream, emit an error <em>as part of the data stream</em>.</li>
+        <li>Let the client decide what to do with partial data.</li>
+      </ul>
+
+      <p>
+        The error becomes <strong>protocol-aware</strong>. For JSON streaming, it might be a trailing error object. For Server-Sent Events, a special <code>event: error</code> message. For plain text, maybe a prefix or suffix. Whatever the format, the error must be something the client can parse without misinterpreting it as valid payload.
+      </p>
+
+      <h2>The Real Problem: Errors After the Pipe Closes</h2>
+
+      <p>
+        Here's the trap. Imagine this setup:
+      </p>
+
+      <ul>
+        <li>Client connects to your proxy.</li>
+        <li>Proxy connects to upstream (Claude, OpenAI, local model).</li>
+        <li>Upstream starts streaming.</li>
+        <li>Proxy pipes data straight to the client.</li>
+        <li>After 30 seconds, upstream crashes or returns a non-200 status.</li>
+      </ul>
+
+      <p>
+        What happens? The pipe is already open. You already sent data. The client has no reason to check for errors—they're getting what they asked for.
+      </p>
+
+      <p>
+        And worse: if the upstream service fails <em>silently</em>—it stops streaming, closes the connection, or returns data without a proper error flag—your proxy might never realize something went wrong. It just sees "connection closed" and finishes the stream cleanly. The client gets incomplete data and assumes success.
+      </p>
+
+      <h2>A Real Example: The Streaming Proxy Bug</h2>
+
+      <p>
+        This happened in a Claude API proxy. The proxy is an OpenAI-compatible wrapper around the Claude CLI. Here's the flow:
+      </p>
+
+      <ol>
+        <li>Client sends OpenAI-formatted request.</li>
+        <li>Proxy converts it to Claude CLI format.</li>
+        <li>Proxy spawns a CLI subprocess.</li>
+        <li>CLI outputs JSON events line-by-line.</li>
+        <li>Proxy converts each JSON event to OpenAI format and streams it to the client.</li>
+      </ol>
+
+      <p>
+        The CLI returns structured output including error flags on each line. Something like:
+      </p>
+
+      <pre><code>{"type": "output", "data": "hello", "error": null}
+{"type": "output", "data": " world", "error": null}
+{"type": "done", "error": null}</code></pre>
+
+      <p>
+        If an error occurs:
+      </p>
+
+      <pre><code>{"type": "output", "data": "partial", "error": null}
+{"type": "done", "error": "Something went wrong"}</code></pre>
+
+      <p>
+        The proxy's streaming handler reads these lines, converts them, and pipes them downstream. But here's the bug: if the CLI returns an error flag in the final <code>done</code> message, the streaming code ignores it. It sends the <code>done</code> message with the error text missing, and the client never knows what happened.
+      </p>
+
+      <p>
+        Why? The streaming code assumed "if we got here, everything is fine." It didn't check the error field. It didn't surface CLI failures as part of the stream. It just closed the pipe cleanly.
+      </p>
+
+      <h2>The Fix: Make Errors Visible in the Stream</h2>
+
+      <p>
+        The solution is to treat errors as <strong>stream events</strong>, not as HTTP response codes. Here's the pattern:
+      </p>
+
+      <ul>
+        <li><strong>Always inspect error flags.</strong> Even in the final message, even after streaming finishes. If there's an error, emit it.</li>
+        <li><strong>Use protocol-aware error format.</strong> For SSE, emit a special event. For JSON Lines, emit an error object. For plain text, prepend an error marker.</li>
+        <li><strong>Include context.</strong> Error code, message, timestamp, request ID. Give the client enough information to retry or debug.</li>
+        <li><strong>Flush before closing.</strong> Make sure the error is actually sent to the client before closing the connection. Don't lose it in buffering.</li>
+      </ul>
+
+      <p>
+        For the Claude proxy, the fix looks like:
+      </p>
+
+      <pre><code>// Read the final done message
+const doneMsg = JSON.parse(finalLine);
+
+// Check for errors
+if (doneMsg.error) {
+  // Emit error as an OpenAI-compatible error event
+  stream.write(`data: ${JSON.stringify({
+    object: "error",
+    error: {
+      message: doneMsg.error,
+      type: "server_error",
+      code: doneMsg.error_code || "unknown"
+    }
+  })}\n\n`);
+}
+
+// Close the stream
+stream.end();</code></pre>
+
+      <p>
+        Now the client sees the error. They can parse it, log it, retry, or degrade gracefully. The error is <strong>visible</strong> instead of invisible.
+      </p>
+
+      <h2>Gotchas: Buffering, Timeouts, and Partial Failures</h2>
+
+      <p>
+        <strong>Buffering:</strong> If you write an error message to the stream but don't flush before closing, the client might never receive it. The data sits in a buffer and vanishes. Always call <code>flush()</code> or <code>end()</code> to ensure delivery.
+      </p>
+
+      <p>
+        <strong>Timeouts:</strong> If the upstream is slow or hangs, the proxy might timeout and close the connection. The client gets a connection reset instead of a clean error. Set aggressive timeouts on the upstream call, and emit a timeout error as part of the stream before giving up.
+      </p>
+
+      <p>
+        <strong>Partial failures:</strong> The upstream sends 80% of the response, then crashes. You've already streamed 80% to the client. Emitting an error message at the end feels like "by the way, the 80% above might be garbage." It's honest, but not great UX. The alternative: stop mid-stream and emit an error without finishing. This requires a protocol-level error marker (like SSE's <code>event: error</code>) so the client knows to discard partial data.
+      </p>
+
+      <p>
+        <strong>Invisible failures:</strong> Sometimes the upstream closes the connection without returning any error message. Your code sees EOF and assumes success. The only fix: don't assume. Check HTTP status codes, check for error flags in each message, and have a fallback: if streaming completes but there's no explicit "success" marker, treat it as an error.
+      </p>
+
+      <h2>Design Patterns for Streaming Errors</h2>
+
+      <p>
+        Different protocols handle this differently. Here are the common patterns:
+      </p>
+
+      <p>
+        <strong>Server-Sent Events (SSE):</strong> Use a special event type. The client listens for both <code>event: message</code> and <code>event: error</code>. Clean separation, simple for the client to handle.
+      </p>
+
+      <pre><code>data: {"content": "hello"}
+
+event: error
+data: {"code": "rate_limit", "message": "too many requests"}
+
+:close</code></pre>
+
+      <p>
+        <strong>JSON Lines:</strong> Each line is a complete JSON object. Errors are just another type of object. The client parses each line and checks the <code>type</code> field.
+      </p>
+
+      <pre><code>{"type": "output", "data": "hello"}
+{"type": "error", "code": "rate_limit", "message": "too many requests"}</code></pre>
+
+      <p>
+        <strong>OpenAI-compatible streaming:</strong> Uses SSE-ish format with <code>data: {"choices":[...]}</code>. Errors can be signaled with a special <code>data: [DONE]</code> followed by an error object, or with a separate error event. (Note: different clients handle this inconsistently, so test thoroughly.)
+      </p>
+
+      <p>
+        <strong>gRPC streaming:</strong> gRPC has two channels: data and errors. Errors come separately, not interleaved. Much cleaner, but not available over HTTP.
+      </p>
+
+      <h2>Monitoring: Catch Invisible Errors</h2>
+
+      <p>
+        Streaming errors are easy to miss because they don't trigger HTTP-level alerts. Set up metrics to catch them:
+      </p>
+
+      <ul>
+        <li><strong>Streaming completion rate:</strong> How many streams complete with an error marker vs clean finish? A high error rate means your upstream is unstable.</li>
+        <li><strong>Partial data percentage:</strong> When errors do occur, how much data made it to the client before the error? If it's consistently 10%, something systematic is failing.</li>
+        <li><strong>Error-to-close ratio:</strong> How many streams close (connection reset) without an explicit error message? These are the invisible failures—they deserve investigation.</li>
+        <li><strong>Time-to-error:</strong> How long into the stream does the error occur? Early errors might indicate a validation problem. Late errors might indicate a timeout or upstream crash.</li>
+      </ul>
+
+      <p>
+        Without these metrics, you'll discover streaming errors only when clients complain about truncated or garbage data.
+      </p>
+
+      <h2>Why This Matters</h2>
+
+      <p>
+        Streaming is the future of AI APIs. Real-time responses, lower latency, better UX. But streaming breaks our error-handling intuitions. We're used to "request goes in, response comes back, check for errors." Streaming is "start streaming, hope it works, emit errors inline."
+      </p>
+
+      <p>
+        If you're building proxies, SDKs, or infrastructure around streaming APIs, you need to:
+      </p>
+
+      <ul>
+        <li>Always check error flags, even in final messages.</li>
+        <li>Make errors <strong>visible</strong> as part of the stream, not invisible.</li>
+        <li>Use protocol-aware error formats so clients can parse them.</li>
+        <li>Monitor for partial failures and invisible errors.</li>
+        <li>Test error cases: timeouts, crashes mid-stream, missing error markers.</li>
+      </ul>
+
+      <p>
+        The alternative is silent failures—and those are the worst kind. A client gets incomplete data, assumes it's correct, and builds on top of garbage. Weeks later, that decision propagates through the system as corrupted output somewhere downstream.
+      </p>
+
+      <p>
+        Make your errors loud. Stream them alongside your data. Let clients see failures and handle them properly. That's how you build reliable streaming systems.
+      </p>
+
+    </article>
+
+  </main>
+
+  <footer>
+    <p>
+      <a href="https://github.com/richardfeynmanclaw/richardfeynmanclaw.github.io" target="_blank" rel="noopener">Source on GitHub</a> ·
+      <a href="https://linkedin.com/in/alessandro-vozza" target="_blank" rel="noopener">LinkedIn</a> ·
+      <a href="mailto:alessandro.vozza@linux.com">Email</a>
+    </p>
+  </footer>
+
+</body>
+</html>
