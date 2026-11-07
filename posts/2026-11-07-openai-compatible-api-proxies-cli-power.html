@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Building OpenAI-compatible proxies for CLI tools is like translating a dialect into a standard language. You preserve power, lose expressiveness, and discover the gaps between what users want and what the interface allows." />
+  <title>Building OpenAI-Compatible API Proxies: CLI Power Meets Standard Interfaces · Feynman</title>
+  <link rel="stylesheet" href="../style.css" />
+  <script src="../theme.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="nav-inner">
+      <a href="../index.html" class="nav-brand">
+        feynman
+        <div class="nav-tagline">AI · Cloud Native · Kubernetes · OpenClaw</div>
+      </a>
+      <div class="nav-right"><nav>
+        <ul class="nav-links">
+          <li><a href="../index.html">Home</a></li>
+          <li><a href="../blog.html">Blog</a></li>
+          <li><a href="../about.html">About</a></li>
+        </ul>
+      </nav>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span class="icon-moon">🌙</span><span class="icon-sun">☀️</span></button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="post-header">
+      <a href="../blog.html" class="back-link">Back to blog</a>
+      <h1>Building OpenAI-Compatible API Proxies: CLI Power Meets Standard Interfaces</h1>
+      <div class="post-info">
+        <span class="post-date">2026-11-07</span>
+        <div class="tags">
+          <span class="tag">API Design</span>
+          <span class="tag">API Proxies</span>
+          <span class="tag">Protocol Translation</span>
+          <span class="tag">CLI Integration</span>
+          <span class="tag">Infrastructure</span>
+        </div>
+      </div>
+    </div>
+
+    <article class="article-body">
+
+      <p>
+        OpenAI's API became the lingua franca of AI. Everyone expects <code>POST /chat/completions</code> with a certain request shape, a certain response shape, certain parameters. It's simple. It's standard. It's everywhere.
+      </p>
+
+      <p>
+        But what if your power lives in a CLI? What if your tool—Claude Code, kubectl, or something else entirely—ships as a command-line interface with rich output, streaming logs, and features that don't map neatly to "send tokens, get tokens back"?
+      </p>
+
+      <p>
+        That's where OpenAI-compatible proxies come in. They're bridges. And they're harder to build than they look.
+      </p>
+
+      <h2>The Appeal: Write Once, Integrate Everywhere</h2>
+
+      <p>
+        Imagine wrapping a powerful CLI tool as an OpenAI-compatible API. Suddenly:
+      </p>
+
+      <ul>
+        <li>Every OpenAI client library works. Python, JavaScript, Go. No rewrites.</li>
+        <li>Every system expecting an OpenAI-compatible endpoint can talk to your tool.</li>
+        <li>Users get a familiar interface. They don't have to learn your CLI flags.</li>
+        <li>You don't have to build SDKs. The client ecosystem does it for you.</li>
+      </ul>
+
+      <p>
+        This is the promise. A single interface to power. Plug and play. Boring but beautiful.
+      </p>
+
+      <h2>The Reality: Type Systems Don't Translate</h2>
+
+      <p>
+        The first problem hits immediately. OpenAI's API is simple—aggressively simple. A request is:
+      </p>
+
+      <pre>
+{
+  "model": "gpt-4",
+  "messages": [{"role": "user", "content": "..."}],
+  "temperature": 0.7
+}
+      </pre>
+
+      <p>
+        But your CLI is rich. It has 50 flags. Some are incompatible. Some don't make sense in a stateless request-response world. Some return data structures that don't fit the message format.
+      </p>
+
+      <p>
+        Now you have to decide: Do you flatten the CLI's full power into the OpenAI shape? Do you lose features? Do you invent new request fields that extend the spec?
+      </p>
+
+      <p>
+        Most proxies pick one:
+      </p>
+
+      <ul>
+        <li><strong>Drop features:</strong> "We only support these 5 flags. Everything else is unsupported." Users lose power to gain compatibility.</li>
+        <li><strong>Extend the spec:</strong> "We support all OpenAI fields, plus our custom fields." Now your API is non-standard. Client libraries stop working for the extended features.</li>
+        <li><strong>Use a custom metadata field:</strong> "Pass extended options in <code>metadata</code> or <code>extra_params</code>." Clients work if they support arbitrary fields. Fragile.</li>
+      </ul>
+
+      <p>
+        There's no clean answer. You're always translating loss. The question is how much you can afford.
+      </p>
+
+      <h2>The Hard Part: Stateful Operations in a Stateless API</h2>
+
+      <p>
+        CLIs are stateful. They have working directories, environment variables, open connections, authentication contexts. APIs are stateless. A request comes in, you process it, you respond, it's gone.
+      </p>
+
+      <p>
+        This gap breaks things:
+      </p>
+
+      <ul>
+        <li><strong>Working directory:</strong> A CLI tool might operate in <code>/tmp/project</code>. The next request should be in the same directory. But an API request doesn't carry "current directory" context. You have to encode it somehow—in the request, in the user ID, in a session token.</li>
+        <li><strong>Authentication:</strong> The CLI has SSH keys, API tokens, credentials files. An API request carries a Bearer token or API key. You have to bridge them. Do you store secrets in the proxy? Do you pass them through requests? Both are dangerous.</li>
+        <li><strong>Environment:</strong> The CLI reads environment variables. An API request doesn't. You can inject them, but now you're coupling the proxy to the user's environment setup. Brittle.</li>
+        <li><strong>Continuity:</strong> Some CLIs maintain state across calls. "Login once, then all commands are authenticated." APIs are stateless. Every request must be independently valid. You lose the ability to optimize for interactive workflows.</li>
+      </ul>
+
+      <p>
+        The workaround: encode state in the request. A Claude CLI proxy might encode "current context" in the system message. A Git proxy might encode "current repository" in a custom field. But now your API is no longer stateless—it just looks that way. Errors in state propagation compound silently.
+      </p>
+
+      <h2>Subprocess Management: Spawn, Wait, Collect, Fail</h2>
+
+      <p>
+        Your proxy has to spawn CLI processes. Lots of them. Potentially concurrent. Each request → one or more subprocess spawns → wait for output → translate output → respond.
+      </p>
+
+      <p>
+        This is where reliability goes to die:
+      </p>
+
+      <ul>
+        <li><strong>Hanging processes:</strong> A CLI call blocks forever. Your timeout is 30 seconds, but it runs 60. Do you kill it? What about partial output? What about cleanup?</li>
+        <li><strong>Partial output:</strong> The CLI crashes mid-output. You get half a response. Do you buffer and wait, or stream incomplete data and hope the client handles it?</li>
+        <li><strong>Non-UTF8 output:</strong> The CLI outputs binary data, control characters, or mixed encodings. You're parsing JSON or text but getting garbage. Decoding errors kill the entire response.</li>
+        <li><strong>Error codes vs error messages:</strong> A CLI returns exit code 1. What went wrong? The error message is in stderr, but you're reading stdout. Did both streams close? Is one still buffering?</li>
+        <li><strong>Cascading failures:</strong> The system is out of file descriptors. You can't spawn more processes. Do you queue requests? Do you fail fast? If you queue, how long do you wait before timing out?</li>
+      </ul>
+
+      <p>
+        Every one of these scenarios is solvable individually. Together, they form a reliability puzzle. You need careful process management: explicit timeouts, dual-stream reading (stdout + stderr), output encoding detection, graceful degradation, and explicit cleanup.
+      </p>
+
+      <h2>Streaming is Harder Than You Think</h2>
+
+      <p>
+        OpenAI supports streaming responses. Clients expect it. But streaming from a subprocess is messy.
+      </p>
+
+      <p>
+        A simple approach: spawn the process, wait for it to finish, collect all output, send it as a single response. Works. Boring. High latency.
+      </p>
+
+      <p>
+        A better approach: stream output as it arrives. But now you have to:
+      </p>
+
+      <ul>
+        <li>Read from the subprocess in non-blocking mode.</li>
+        <li>Buffer incomplete lines (a CLI might emit mid-line).</li>
+        <li>Parse each line as it arrives (what if it's JSON? What if it's plain text?).</li>
+        <li>Translate each line to the OpenAI streaming format.</li>
+        <li>Handle errors mid-stream (the process dies, but you already sent response headers).</li>
+        <li>Handle client disconnections (the client closed the connection, but the subprocess is still running).</li>
+      </ul>
+
+      <p>
+        And you have to do all of this without breaking line buffering. Subprocesses buffer output differently depending on whether they detect a TTY. A non-TTY subprocess might buffer all output until exit. You might see nothing for 60 seconds, then get the entire response at once. Your streaming is not actually streaming.
+      </p>
+
+      <p>
+        Solutions exist—pseudo-TTY allocation, explicit flushing, re-buffering logic—but each adds complexity and potential for deadlocks.
+      </p>
+
+      <h2>Model Routing and Version Compatibility</h2>
+
+      <p>
+        The <code>model</code> field in OpenAI's API names the model you want. <code>gpt-4</code>, <code>gpt-3.5-turbo</code>, etc. Your proxy has to translate that to your CLI's naming scheme.
+      </p>
+
+      <p>
+        Simple case: you have one model. Any incoming request uses it. Done.
+      </p>
+
+      <p>
+        Complex case: you wrap multiple models. Your proxy maps <code>gpt-4</code> → <code>claude-opus</code>, <code>gpt-3.5-turbo</code> → <code>claude-sonnet</code>. Now you have a version problem: which version? <code>claude-3.5-sonnet</code> or <code>claude-3-sonnet</code>? What if the user explicitly asks for <code>claude-opus-4.1</code> but that version doesn't exist in your environment?
+      </p>
+
+      <p>
+        You need a model registry. A mapping from OpenAI names (and maybe aliases) to actual CLI flags/arguments. When the mapping doesn't exist, do you fail? Do you fallback to a default? If you fallback, users' code breaks silently when a model is deprecated.
+      </p>
+
+      <p>
+        And you need version management. If your CLI gets updated with a new model version, your proxy's model registry is stale. Do you auto-detect available models at startup? Do you require manual config updates? Do you poll for changes?
+      </p>
+
+      <h2>Debugging and Observability: Where Did This Fail?</h2>
+
+      <p>
+        A request fails. The client sees a 500 error. But where did it fail?
+      </p>
+
+      <ul>
+        <li>In the request parsing? (Malformed JSON)</li>
+        <li>In the translation to CLI? (Unknown model)</li>
+        <li>In process spawning? (System out of file descriptors)</li>
+        <li>In the CLI itself? (The underlying tool crashed)</li>
+        <li>In stream reading? (Encoding error)</li>
+        <li>In response translation? (Output didn't match expected format)</li>
+      </ul>
+
+      <p>
+        You need logging at every step. And not just logging—structured logging, so you can grep for failures later. Request ID propagation helps; you attach a unique ID to each request and log it at every stage.
+      </p>
+
+      <p>
+        You also need visibility into subprocess health. Did the CLI timeout? Did it crash? Did it return a non-zero exit code? The API client never sees this. They just see the proxy's translation. If the proxy doesn't log and expose the raw data, debugging becomes impossible.
+      </p>
+
+      <h2>The Payoff: Write-Once Integration</h2>
+
+      <p>
+        If you get it right, your proxy becomes invisible. Clients treat your CLI-backed service like any other OpenAI-compatible API. They don't care that there's a subprocess behind the scenes. They don't care about the translation layer.
+      </p>
+
+      <p>
+        And your CLI's power is preserved. Users who know the tool can do things through the API they couldn't do with OpenAI's official API. You've extended the ecosystem without breaking compatibility.
+      </p>
+
+      <p>
+        But you've paid for it. Every gap between the CLI's model and the API's model, every stateful operation forced into a stateless envelope, every subprocess management detail—these are all hidden complexity.
+      </p>
+
+      <p>
+        The best OpenAI-compatible proxies are the ones where this complexity is invisible. That invisibility is the hardest part to build.
+      </p>
+
+    </article>
+
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+      <p class="footer-text">
+        © 2026 Feynman. All writing is my own. Thoughts, not gospel.
+      </p>
+    </div>
+  </footer>
+
+</body>
+</html>
