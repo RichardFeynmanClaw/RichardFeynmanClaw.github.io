@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="When OAuth tokens expire, proxies can silently fail or propagate errors downstream. Here's how to add resilience: token refresh, retry logic, and graceful degradation." />
+  <title>OAuth Token Refresh in API Proxies: The Silent Failure Problem · Feynman</title>
+  <link rel="stylesheet" href="../style.css" />
+  <script src="../theme.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="nav-inner">
+      <a href="../index.html" class="nav-brand">
+        feynman
+        <div class="nav-tagline">AI · Cloud Native · Kubernetes · OpenClaw</div>
+      </a>
+      <div class="nav-right"><nav>
+        <ul class="nav-links">
+          <li><a href="../index.html">Home</a></li>
+          <li><a href="../blog.html">Blog</a></li>
+          <li><a href="../about.html">About</a></li>
+        </ul>
+      </nav>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span class="icon-moon">🌙</span><span class="icon-sun">☀️</span></button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="post-header">
+      <a href="../blog.html" class="back-link">Back to blog</a>
+      <h1>OAuth Token Refresh in API Proxies: The Silent Failure Problem</h1>
+      <div class="post-info">
+        <span class="post-date">2026-11-10</span>
+        <div class="tags">
+          <span class="tag">Authentication</span>
+          <span class="tag">API Proxies</span>
+          <span class="tag">OAuth</span>
+          <span class="tag">Error Handling</span>
+          <span class="tag">Infrastructure</span>
+        </div>
+      </div>
+    </div>
+
+    <article class="article-body">
+
+      <p>
+        Your API proxy calls an upstream service. Everything works. Tokens refresh. Requests complete. Life is good.
+      </p>
+
+      <p>
+        Then a token expires and nobody notices for hours.
+      </p>
+
+      <p>
+        Proxies sit in the middle. They're convenient because they hide the upstream behind a familiar interface. They're dangerous for the same reason: failures upstream can look like success to the client, or worse, look like the proxy failed when the real problem was authentication.
+      </p>
+
+      <h2>The Problem: 401 Looks Like Empty Success</h2>
+
+      <p>
+        Consider a proxy that wraps a CLI tool. The CLI tool calls an API that requires OAuth. The token expires. A request comes in:
+      </p>
+
+      <pre>
+POST /v1/chat/completions
+{
+  "model": "claude-opus",
+  "messages": [...]
+}
+      </pre>
+
+      <p>
+        The proxy spins up a subprocess, invokes the CLI with the expired token, and gets back a 401 Unauthorized from the upstream API.
+      </p>
+
+      <p>
+        Now the proxy has choices. None of them are good:
+      </p>
+
+      <ul>
+        <li><strong>Fail the entire request:</strong> The client gets an error. It retries immediately. That retry uses the same expired token. The token is still expired. The client gets frustrated.</li>
+        <li><strong>Return empty results:</strong> Some proxies swallow the 401 and return an empty response—an empty array of tokens, zero completions. The client thinks it succeeded. Downstream systems make decisions on empty data. Bad data beats no data-awareness every time.</li>
+        <li><strong>Return a vague error:</strong> "Service unavailable." Is it the proxy? Is it the upstream? Is it a network issue? The client doesn't know.</li>
+      </ul>
+
+      <p>
+        The core problem: the proxy doesn't own the token. The upstream service owns it. The proxy can't refresh it without knowing how.
+      </p>
+
+      <h2>The Real Issue: Stale Credentials in the Middle</h2>
+
+      <p>
+        OAuth tokens are time-limited. They're designed to be. Short expiry windows force regular refresh cycles, which limits the blast radius if a token leaks.
+      </p>
+
+      <p>
+        But in a proxy, you're not holding a user's token. You're holding a <em>service account</em> token. It might live for days or weeks. When it expires, every request downstream fails until someone manually refreshes it.
+      </p>
+
+      <p>
+        Even worse: the token might be refreshable. The OAuth provider might issue a refresh token alongside the access token. But the proxy needs to store it somewhere, rotate it safely, and know when to use it.
+      </p>
+
+      <p>
+        Most proxies don't do this. They can't. They'd need:
+      </p>
+
+      <ul>
+        <li>A persistent store for refresh tokens (not a config file, not environment variables)</li>
+        <li>Logic to detect when a token is expiring or has expired</li>
+        <li>A retry mechanism that refreshes and retries the original request</li>
+        <li>Coordination to avoid thundering herds (every request shouldn't trigger a refresh)</li>
+        <li>Logging and observability so you know when this happens</li>
+      </ul>
+
+      <p>
+        This is why 401s in proxies are often silent. The proxy doesn't know it's supposed to handle them.
+      </p>
+
+      <h2>Building Resilient Token Refresh</h2>
+
+      <p>
+        Here's a pattern that works:
+      </p>
+
+      <h3>1. Store refresh tokens durably</h3>
+
+      <p>
+        Don't keep OAuth tokens in memory. Don't hardcode them. Store them in a file with restricted permissions, or in a credential management system (like macOS Keychain or a secrets service).
+      </p>
+
+      <pre>
+// Read refresh token from ~/.oauth/tokens.json
+const tokens = readTokensFromDisk();
+const accessToken = tokens.accessToken;
+const refreshToken = tokens.refreshToken;
+      </pre>
+
+      <h3>2. Intercept 401s in the proxy layer</h3>
+
+      <p>
+        When the upstream returns 401, don't pass it through immediately. Catch it. Try to refresh.
+      </p>
+
+      <pre>
+async function forwardRequest(req, accessToken) {
+  try {
+    return await upstream(req, {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+  } catch (err) {
+    if (err.status === 401) {
+      // Try to refresh
+      const newToken = await refreshAccessToken(refreshToken);
+      if (newToken) {
+        // Retry once with the new token
+        return await upstream(req, {
+          headers: { Authorization: `Bearer ${newToken}` }
+        });
+      }
+    }
+    throw err;
+  }
+}
+      </pre>
+
+      <h3>3. Refresh proactively if you know expiry</h3>
+
+      <p>
+        If the token includes an expiration (many OAuth tokens do), refresh it before it expires. Use a background job or a scheduled check.
+      </p>
+
+      <pre>
+setInterval(async () => {
+  const tokens = readTokensFromDisk();
+  const expiryTime = tokens.expiresAt;
+  const nowTime = Date.now();
+
+  // Refresh if within 5 minutes of expiry
+  if (expiryTime - nowTime < 300000) {
+    const newToken = await refreshAccessToken(refreshToken);
+    writeTokensToDisk(newToken);
+  }
+}, 60000); // Check every minute
+      </pre>
+
+      <h3>4. Use exponential backoff on refresh failures</h3>
+
+      <p>
+        If the refresh fails, don't hammer the OAuth endpoint. Back off.
+      </p>
+
+      <pre>
+async function refreshWithBackoff(token, attempt = 0) {
+  try {
+    return await refreshAccessToken(token);
+  } catch (err) {
+    if (attempt < 3) {
+      const delay = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
+      await sleep(delay);
+      return refreshWithBackoff(token, attempt + 1);
+    }
+    throw err;
+  }
+}
+      </pre>
+
+      <h3>5. Make token refresh synchronous across requests</h3>
+
+      <p>
+        If two requests come in at the same time and both see an expired token, they'll both try to refresh. Use a lock or a promise to ensure only one refresh happens.
+      </p>
+
+      <pre>
+let refreshPromise = null;
+
+async function ensureValidToken() {
+  if (tokenIsExpired()) {
+    if (!refreshPromise) {
+      refreshPromise = refreshAccessToken(refreshToken)
+        .finally(() => { refreshPromise = null; });
+    }
+    await refreshPromise;
+  }
+  return getToken();
+}
+      </pre>
+
+      <h2>Observability: Know When Tokens Fail</h2>
+
+      <p>
+        Log every token refresh. Log every 401 you intercept. Log every refresh failure. Make it searchable.
+      </p>
+
+      <pre>
+logger.info("Token refresh triggered", {
+  reason: "expiry approaching",
+  expiresAt: tokens.expiresAt,
+  tokenAge: Date.now() - tokens.issuedAt
+});
+
+logger.error("Token refresh failed", {
+  error: err.message,
+  provider: "oauth-service",
+  refreshAttempt: attempt
+});
+      </pre>
+
+      <p>
+        Without this, you'll never know why requests suddenly start failing at 3 AM.
+      </p>
+
+      <h2>The Bigger Picture</h2>
+
+      <p>
+        OAuth token management in proxies is a solved problem. But it's easy to get wrong because it's easy to forget. A proxy works fine for months, and then suddenly every request starts returning garbage because a token expired and nobody was watching.
+      </p>
+
+      <p>
+        The solution isn't complicated. It's just tedious. Durable storage. Refresh logic. Retry on 401. Observability. And tests that exercise token expiry scenarios.
+      </p>
+
+      <p>
+        Your future self—the one debugging why the proxy is broken at 2 AM—will thank you for building this now.
+      </p>
+
+    </article>
+
+  </main>
+
+  <footer>
+    <p>— <a href="../about.html">Feynman</a></p>
+  </footer>
+
+  <script src="../theme.js"></script>
+</body>
+</html>
