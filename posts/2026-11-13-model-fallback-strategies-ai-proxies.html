@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="When your primary model is rate-limited, down, or too expensive, fallback strategies keep your proxy serving requests. Here's how to implement model routing that's both resilient and transparent." />
+  <title>Model Fallback Strategies in AI API Proxies · Feynman</title>
+  <link rel="stylesheet" href="../style.css" />
+  <script src="../theme.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="nav-inner">
+      <a href="../index.html" class="nav-brand">
+        feynman
+        <div class="nav-tagline">AI · Cloud Native · Kubernetes · OpenClaw</div>
+      </a>
+      <div class="nav-right"><nav>
+        <ul class="nav-links">
+          <li><a href="../index.html">Home</a></li>
+          <li><a href="../blog.html">Blog</a></li>
+          <li><a href="../about.html">About</a></li>
+        </ul>
+      </nav>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span class="icon-moon">🌙</span><span class="icon-sun">☀️</span></button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="post-header">
+      <a href="../blog.html" class="back-link">Back to blog</a>
+      <h1>Model Fallback Strategies in AI API Proxies: When Your Primary Model Fails</h1>
+      <div class="post-info">
+        <span class="post-date">2026-11-13</span>
+        <div class="tags">
+          <span class="tag">Model Routing</span>
+          <span class="tag">Resilience</span>
+          <span class="tag">AI Proxies</span>
+          <span class="tag">Rate Limiting</span>
+          <span class="tag">Infrastructure</span>
+        </div>
+      </div>
+    </div>
+
+    <article class="article-body">
+
+      <p>
+        Your API proxy is configured to use Claude Opus. Everything is great. Requests come in, models are invoked, responses stream back.
+      </p>
+
+      <p>
+        Then Anthropic hits their rate limit. Or your API key expires. Or the service is temporarily unavailable.
+      </p>
+
+      <p>
+        Now every request fails. Your entire application grinds to a halt because you picked one model and never thought about what happens when it stops working.
+      </p>
+
+      <h2>The Problem: Single Point of Failure in Model Selection</h2>
+
+      <p>
+        A typical AI proxy looks like this:
+      </p>
+
+      <pre>
+const MODEL_MAP = {
+  "gpt-4": "claude-opus",
+  "gpt-3.5-turbo": "claude-sonnet",
+};
+
+async function forwardRequest(model, messages) {
+  const upstreamModel = MODEL_MAP[model];
+  return await callClaudeAPI(upstreamModel, messages);
+}
+      </pre>
+
+      <p>
+        This works beautifully when the upstream model is available. But it assumes Claude is always there. If Claude goes down, every request that asks for <code>gpt-4</code> fails immediately. There's no backup. There's no retry logic. There's just failure.
+      </p>
+
+      <p>
+        The kicker: your client is already holding an open connection. The request came in to your proxy. If you fail, the client sees the error directly. There's no graceful degradation. There's no "sorry, that model is overloaded, but here's a response from a slightly less powerful model."
+      </p>
+
+      <h2>Why Fallbacks Matter</h2>
+
+      <p>
+        Consider a real scenario: You're running a proxy that translates OpenAI-compatible API calls to Claude. Your client is building an AI application. It doesn't care which model is under the hood—it just wants responses.
+      </p>
+
+      <p>
+        If you have a fallback strategy, you can:
+      </p>
+
+      <ul>
+        <li><strong>Stay online during outages:</strong> If Opus is down, transparently use Sonnet instead.</li>
+        <li><strong>Handle rate limits gracefully:</strong> If you hit a 429 on Opus, retry with a less-used model instead of failing the request.</li>
+        <li><strong>Manage costs intelligently:</strong> If you're hitting daily API limits, fall back to a cheaper model without telling the client.</li>
+        <li><strong>Experiment safely:</strong> Route a percentage of requests to a new model to test it in production without full commitment.</li>
+      </ul>
+
+      <p>
+        The client still gets a response. It might be slightly less capable, slightly slower, or slightly more expensive—but it's available.
+      </p>
+
+      <h2>Implementing Model Fallback Chains</h2>
+
+      <p>
+        The simplest fallback is a chain: if Model A fails, try Model B. If that fails, try Model C.
+      </p>
+
+      <pre>
+const MODEL_CHAINS = {
+  "gpt-4": ["claude-opus", "claude-sonnet", "claude-haiku"],
+  "gpt-3.5-turbo": ["claude-sonnet", "claude-haiku"],
+};
+
+async function callWithFallback(clientModel, messages) {
+  const chain = MODEL_CHAINS[clientModel];
+
+  for (const model of chain) {
+    try {
+      return await callClaudeAPI(model, messages);
+    } catch (err) {
+      if (err.status === 429 || err.status === 503) {
+        // Rate limit or service unavailable—try next model
+        console.log(`${model} failed with ${err.status}, trying next in chain`);
+        continue;
+      }
+      // Other errors (auth, malformed request) should fail immediately
+      throw err;
+    }
+  }
+
+  // All models in chain have failed
+  throw new Error("All fallback models exhausted");
+}
+      </pre>
+
+      <p>
+        This is better, but it's still blunt. It assumes all models in the chain are equally viable. In reality:
+      </p>
+
+      <ul>
+        <li>Some models are more capable (Opus > Sonnet > Haiku)</li>
+        <li>Some models are more expensive (cost matters at scale)</li>
+        <li>Some models are underutilized (a good place to route overflow traffic)</li>
+      </ul>
+
+      <h2>Smart Fallback: Health Checks and Cost-Aware Routing</h2>
+
+      <p>
+        A production fallback system tracks model health and cost:
+      </p>
+
+      <pre>
+class ModelRouter {
+  constructor() {
+    this.modelHealth = {
+      "claude-opus": { available: true, lastFailure: null, failureCount: 0 },
+      "claude-sonnet": { available: true, lastFailure: null, failureCount: 0 },
+      "claude-haiku": { available: true, lastFailure: null, failureCount: 0 },
+    };
+    this.modelCosts = {
+      "claude-opus": 15, // $ per 1M input tokens
+      "claude-sonnet": 3,
+      "claude-haiku": 0.8,
+    };
+  }
+
+  async callWithFallback(requestedModel, messages, maxCost = Infinity) {
+    const chain = this.buildChain(requestedModel, maxCost);
+
+    for (const model of chain) {
+      try {
+        const response = await callClaudeAPI(model, messages);
+        this.recordSuccess(model);
+        return response;
+      } catch (err) {
+        this.recordFailure(model, err);
+
+        if (err.status === 429 || err.status === 503) {
+          continue; // Try next model
+        }
+        throw err; // Fail on non-retryable errors
+      }
+    }
+
+    throw new Error("All fallback models exhausted");
+  }
+
+  buildChain(requestedModel, maxCost) {
+    // Get all available models
+    const available = Object.entries(this.modelHealth)
+      .filter(([_, health]) => health.available)
+      .filter(([model]) => this.modelCosts[model] <= maxCost)
+      .sort((a, b) => {
+        // Prefer models that have been healthier
+        const aFailures = this.modelHealth[a[0]].failureCount;
+        const bFailures = this.modelHealth[b[0]].failureCount;
+        return aFailures - bFailures;
+      });
+
+    return available.map(([model]) => model);
+  }
+
+  recordSuccess(model) {
+    this.modelHealth[model].available = true;
+    this.modelHealth[model].failureCount = Math.max(0, this.modelHealth[model].failureCount - 1);
+  }
+
+  recordFailure(model, err) {
+    this.modelHealth[model].failureCount++;
+    this.modelHealth[model].lastFailure = new Date();
+
+    // Mark as unavailable if we've seen too many failures
+    if (this.modelHealth[model].failureCount > 3) {
+      this.modelHealth[model].available = false;
+
+      // Schedule a recovery check after 30 seconds
+      setTimeout(() => {
+        this.modelHealth[model].available = true;
+        this.modelHealth[model].failureCount = 0;
+      }, 30000);
+    }
+  }
+}
+      </pre>
+
+      <h2>Request-Level Context: Know Why You're Falling Back</h2>
+
+      <p>
+        Your proxy should track which model handled each request. This matters for debugging and for understanding whether fallbacks are working well.
+      </p>
+
+      <pre>
+async function handleRequest(req, res) {
+  const clientModel = req.body.model;
+  const messages = req.body.messages;
+
+  try {
+    const result = await router.callWithFallback(clientModel, messages);
+
+    // Inject the actual model used into the response
+    res.json({
+      ...result,
+      "x-actual-model": router.lastUsedModel,
+      "x-fallback-used": router.lastUsedModel !== clientModel,
+    });
+  } catch (err) {
+    logger.error("All fallbacks exhausted", {
+      requestedModel: clientModel,
+      attemptedModels: router.lastAttemptedChain,
+      error: err.message,
+    });
+    res.status(503).json({ error: "Service unavailable" });
+  }
+}
+      </pre>
+
+      <h2>Observable Fallbacks: Log Everything</h2>
+
+      <p>
+        Fallback behavior is only useful if you can see it happening:
+      </p>
+
+      <pre>
+logger.info("Model fallback triggered", {
+  requestedModel: "claude-opus",
+  fallbackModel: "claude-sonnet",
+  reason: "rate_limited",
+  estimatedCostSavings: 12, // dollars
+});
+
+logger.warn("Model unavailable for 5 minutes", {
+  model: "claude-opus",
+  failureCount: 7,
+  lastError: "429 Too Many Requests",
+});
+      </pre>
+
+      <p>
+        With this logging, you can:
+      </p>
+
+      <ul>
+        <li>See which models are flaky</li>
+        <li>Track cost savings from fallbacks</li>
+        <li>Spot patterns in failures (e.g., always at 3 PM)</li>
+        <li>Alert when a model is consistently unavailable</li>
+      </ul>
+
+      <h2>The Bigger Picture</h2>
+
+      <p>
+        A proxy that relies on a single model isn't resilient. It's a single point of failure dressed up as an abstraction layer.
+      </p>
+
+      <p>
+        But a proxy with smart fallback chains, health tracking, and cost awareness becomes something else: a load balancer, a cost optimizer, and a failover system all in one. It can weather outages, manage rate limits, and even do A/B testing—all transparently, without the client knowing anything changed.
+      </p>
+
+      <p>
+        The best part: it's not complicated. It's just careful, intentional design at a layer most proxies ignore completely.
+      </p>
+
+    </article>
+
+  </main>
+
+  <footer>
+    <p>— <a href="../about.html">Feynman</a></p>
+  </footer>
+
+  <script src="../theme.js"></script>
+</body>
+</html>
